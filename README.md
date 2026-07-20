@@ -65,7 +65,7 @@ supabase/migrations/    schema PostgreSQL e configuração do bucket privado
 
 ## Requisitos
 
-- Node.js 22 LTS (fixado em `.nvmrc` e `engines`);
+- Node.js 24 LTS (fixado em `.nvmrc` e `engines`);
 - pnpm 11.9.0 (fixado no `packageManager` da raiz);
 - projeto Supabase;
 - conta Railway para publicação;
@@ -252,6 +252,10 @@ Mantenha os nomes dos serviços como `@prestou/api` e `@prestou/web`. Se precisa
 renomeá-los, defina `PRESTOU_RAILWAY_SERVICE=api` ou
 `PRESTOU_RAILWAY_SERVICE=web` no serviço correspondente. Um nome desconhecido
 interrompe o deploy com uma mensagem explícita, sem iniciar o workspace errado.
+
+O [`nixpacks.toml`](./nixpacks.toml) fixa uma versão atual do Corepack antes da
+instalação com pnpm. Isso evita que a versão legada embutida no Nixpacks seja
+executada com Node.js 24.
 
 Antes do deploy da API, configure pelo menos `DATABASE_URL`, `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_WEB_URL`,
