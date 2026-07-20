@@ -236,6 +236,17 @@ Authorization: Bearer <CRON_SECRET>
 
 O processamento é idempotente por pagamento e dia.
 
+## Railway
+
+O [`railway.json`](./railway.json) da raiz descreve o serviço da API:
+
+- build: `npm run build --workspace @prestou/api`;
+- start: `npm start`;
+- health check: `GET /health`;
+- restart automático em caso de falha.
+
+Antes do deploy, configure no serviço pelo menos `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_WEB_URL`, `CORS_ORIGINS` e `CRON_SECRET`. O Railway fornece `PORT` automaticamente.
+
 ## Decisões técnicas
 
 - [ADR-001 — Arquitetura híbrida Supabase + Railway](./specs/decisoes/ADR-001-arquitetura-hibrida-supabase-railway.md)
