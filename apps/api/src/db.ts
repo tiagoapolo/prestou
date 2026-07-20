@@ -41,6 +41,17 @@ const postgresConnection = postgres(config.databaseUrl, {
   max: config.databasePoolSize,
   ssl: config.databaseSsl ? "require" : false,
   prepare: false,
+  // PostgreSQL `date` represents a calendar day, not an instant in time.
+  // Keep it as YYYY-MM-DD so it matches the API types and is not shifted by
+  // the server timezone. Postgres.js otherwise parses OID 1082 as a Date.
+  types: {
+    dateOnly: {
+      to: 1082,
+      from: [1082],
+      serialize: (value: string) => value,
+      parse: (value: string) => value,
+    },
+  },
 });
 
 export const db: DatabaseClient = new PostgresClient(postgresConnection);

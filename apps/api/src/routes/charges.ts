@@ -8,17 +8,18 @@ import { track } from "../analytics.js";
 import { chargeMessage, paymentUrl, waMeLink, formatBRL } from "../messages.js";
 import { derivedStatus, todayISO } from "../state.js";
 import type { ChargeRow, ClientRow, PaymentRow, ProviderRow } from "../types.js";
+import { amountCentsSchema, isoDateSchema, mobileSchema, requiredText, validationMessage } from "../validation.js";
 
 const createChargeSchema = z.object({
   client: z.object({
     /** Reaproveita cliente existente (critério F2: não redigitar). */
     id: z.string().uuid().optional(),
-    name: z.string().min(2).max(80).optional(),
-    whatsapp: z.string().min(10).max(20).optional(),
+    name: requiredText("Nome do cliente", 2, 80).optional(),
+    whatsapp: mobileSchema.optional(),
   }),
-  description: z.string().min(2).max(120),
-  amountCents: z.number().int().positive().max(99_999_99),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  description: requiredText("Serviço", 2, 120),
+  amountCents: amountCentsSchema,
+  dueDate: isoDateSchema,
   /** Duração do preenchimento no cliente, para medir a meta de 60s (F2). */
   fillMs: z.number().int().nonnegative().optional(),
 });
@@ -85,7 +86,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply
         .code(400)
-        .send({ error: "Dados inválidos", issues: parsed.error.issues });
+        .send({ error: validationMessage(parsed.error), issues: parsed.error.issues });
     }
     const body = parsed.data;
     const provider = req.provider!;

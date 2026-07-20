@@ -14,10 +14,16 @@ export function LoginPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setError("E-mail é obrigatório");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await sendMagicLink(email);
+      await sendMagicLink(normalizedEmail);
+      setEmail(normalizedEmail);
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível enviar o link");

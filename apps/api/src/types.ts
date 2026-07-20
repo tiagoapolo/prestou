@@ -11,6 +11,8 @@ export interface ProviderRow {
   profession: string;
   photo_url: string | null;
   city: string | null;
+  state: string | null;
+  municipality_code: string | null;
   pix_key: string;
   pix_key_type: string;
   whatsapp: string;

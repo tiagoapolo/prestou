@@ -6,24 +6,55 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatMobile, isValidMobile, normalizeMobile } from "../formats";
+import { CityAutocomplete } from "../components/CityAutocomplete";
 
 export function OnboardingPage() {
   const { refreshProvider } = useAuth();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [whatsapp, setWhatsapp] = useState("");
+  const [consent, setConsent] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError("");
     const data = new FormData(event.currentTarget);
+    const name = String(data.get("name") ?? "").trim();
+    const profession = String(data.get("profession") ?? "").trim();
+    const pixKey = String(data.get("pixKey") ?? "").trim();
+    const city = String(data.get("city") ?? "").trim();
+    const state = String(data.get("state") ?? "");
+    const municipalityCode = String(data.get("municipalityCode") ?? "");
+    if (name.length < 2 || profession.length < 2 || pixKey.length < 3) {
+      setError("Preencha todos os campos obrigatórios");
+      setBusy(false);
+      return;
+    }
+    if (!isValidMobile(whatsapp)) {
+      setError("Informe um celular válido com DDD");
+      setBusy(false);
+      return;
+    }
+    if (!consent) {
+      setError("Você precisa concordar com o uso dos dados para continuar");
+      setBusy(false);
+      return;
+    }
+    if (city && (!state || !municipalityCode)) {
+      setError("Selecione uma cidade/município na lista de sugestões");
+      setBusy(false);
+      return;
+    }
     try {
       await api("/api/providers", {
         method: "POST",
         body: JSON.stringify({
-          name: data.get("name"), profession: data.get("profession"),
-          whatsapp: data.get("whatsapp"), pixKey: data.get("pixKey"),
-          city: data.get("city") || undefined, consent: true,
+          name, profession,
+          whatsapp: normalizeMobile(whatsapp), pixKey,
+          municipality: city ? { name: city, state, ibgeCode: municipalityCode } : undefined,
+          consent,
         }),
       });
       await refreshProvider();
@@ -41,10 +72,10 @@ export function OnboardingPage() {
         <form onSubmit={submit} className="stack">
           <Label>Seu nome<Input name="name" required minLength={2} autoComplete="name" /></Label>
           <Label>Profissão<Input name="profession" required minLength={2} placeholder="Jardinagem, consultas…" /></Label>
-          <Label>Seu WhatsApp<Input name="whatsapp" required inputMode="tel" placeholder="(11) 99999-9999" /></Label>
+          <Label>Seu WhatsApp<Input name="whatsapp" required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={whatsapp} onChange={(event) => setWhatsapp(formatMobile(event.target.value))} maxLength={15} pattern="\([1-9][0-9]\) 9[0-9]{4}-[0-9]{4}" title="Informe um celular válido com DDD" /></Label>
           <Label>Chave Pix<Input name="pixKey" required placeholder="CPF, celular, e-mail ou aleatória" /></Label>
-          <Label>Cidade <span className="optional">opcional</span><Input name="city" /></Label>
-          <Label className="check-row"><Checkbox name="consent" required /> <span>Concordo com o uso destes dados para criar e acompanhar minhas cobranças.</span></Label>
+          <Label>Cidade/município <span className="optional">opcional</span><CityAutocomplete /></Label>
+          <Label className="check-row"><Checkbox name="consent" required checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} /> <span>Concordo com o uso destes dados para criar e acompanhar minhas cobranças.</span></Label>
           {error && <ErrorNotice message={error} />}
           <Button disabled={busy}>{busy ? "Salvando…" : "Começar a cobrar"}</Button>
         </form>

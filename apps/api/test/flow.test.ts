@@ -61,7 +61,7 @@ before(async () => {
       profession: "Jardinagem",
       whatsapp: "11988887777",
       pixKey: "11999998888",
-      city: "São Paulo",
+      municipality: { name: "São Paulo", state: "SP", ibgeCode: "3550308" },
       consent: true,
     },
   });

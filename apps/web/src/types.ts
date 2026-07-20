@@ -6,6 +6,8 @@ export interface Provider {
   profession: string;
   photoUrl: string | null;
   city: string | null;
+  state: string | null;
+  municipalityCode: string | null;
   pixKeyType: string;
   pixKeyMasked: string;
   whatsapp: string;
