@@ -12,7 +12,6 @@ export class ApiError extends Error {
 }
 
 async function accessToken(): Promise<string> {
-  if (env.devApiToken) return env.devApiToken;
   const { data } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
   return data.session?.access_token ?? "";
 }

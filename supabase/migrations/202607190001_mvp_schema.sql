@@ -15,7 +15,6 @@ create table public.providers (
   pix_key text not null,
   pix_key_type text not null check (pix_key_type in ('cpf', 'cnpj', 'phone', 'email', 'evp')),
   whatsapp text not null,
-  api_token text unique,
   consent_at timestamptz not null,
   created_at timestamptz not null default now()
 );
@@ -120,4 +119,3 @@ on conflict (id) do update set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
-

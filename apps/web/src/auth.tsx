@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { api, ApiError } from "./api";
-import { env } from "./config";
 import { supabase } from "./supabase";
 import type { Provider } from "./types";
 
@@ -39,10 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (env.devApiToken) {
-      loadProvider().finally(() => setLoading(false));
-      return;
-    }
     if (!supabase) {
       setLoading(false);
       return;
@@ -65,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthValue>(() => ({
     loading,
-    authenticated: Boolean(session || env.devApiToken),
+    authenticated: Boolean(session),
     needsOnboarding,
     provider,
     async sendMagicLink(email) {

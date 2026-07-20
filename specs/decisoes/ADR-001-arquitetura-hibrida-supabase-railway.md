@@ -19,7 +19,7 @@ relacionado:
 Usar uma arquitetura híbrida no MVP:
 
 - **Supabase:** autenticação dos prestadores, PostgreSQL e Storage privado dos comprovantes.
-- **Railway:** API Fastify, PWA e execução agendada dos lembretes.
+- **Railway:** API Fastify, site mobile e execução agendada dos lembretes.
 - **Meta Cloud API:** envio unidirecional de notificações WhatsApp ao prestador.
 
 Decisão aprovada por Fonseca em 19 de julho de 2026.
@@ -51,7 +51,7 @@ O MVP deve minimizar trabalho de infraestrutura que não testa a hipótese de pr
 
 | Componente | Responsabilidade |
 |---|---|
-| PWA | Interface mobile-first, sessão Supabase e chamadas à API |
+| Site mobile | Interface mobile-first, sessão Supabase e chamadas à API |
 | Supabase Auth | Identidade, login, sessão e recuperação de acesso |
 | API Fastify | Autorização, Pix, cobranças, estados, analytics, lembretes e WhatsApp |
 | Supabase PostgreSQL | Persistência transacional e auditoria |
@@ -68,20 +68,11 @@ O MVP deve minimizar trabalho de infraestrutura que não testa a hipótese de pr
 - A service role do Supabase existe apenas no backend Railway e nunca chega ao navegador.
 - Transições de pagamento continuam atômicas e auditadas.
 
-## Plano de migração
+## Implementação
 
-1. Criar migrações PostgreSQL equivalentes ao schema SQLite.
-2. Substituir o acesso síncrono SQLite por um repositório PostgreSQL assíncrono.
-3. Trocar Bearer token próprio pela validação do JWT Supabase.
-4. Migrar upload local para bucket privado com URLs assinadas.
-5. Construir a PWA e integrar a sessão Supabase.
-6. Adicionar configuração de deploy Railway e cron idempotente.
-7. Manter testes automatizados das regras críticas e adicionar integração PostgreSQL.
+O schema PostgreSQL, a validação JWT, o Storage privado e o site mobile foram implementados. Em 20 de julho de 2026, o fallback SQLite também foi removido; ver [[ADR-005 - Supabase como ambiente único de dados]].
 
 ## Decisões pendentes
 
-- Método de login do prestador: magic link por e-mail, senha ou OTP por telefone.
-- Estratégia de frontend no Railway: serviço Node/SSR ou build estático.
 - Retenção dos comprovantes e prazo das URLs assinadas.
 - Política de ambientes e uso de projeto Supabase separado para produção.
-

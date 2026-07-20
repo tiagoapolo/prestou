@@ -1,4 +1,4 @@
-import { db, databaseMode, queryAll, queryOne } from "./db.js";
+import { db, queryAll, queryOne } from "./db.js";
 import { newId } from "./ids.js";
 
 /** Eventos do funil (seção 9 do plano). Sem isso o piloto não gera aprendizado. */
@@ -72,12 +72,8 @@ export async function funnel(providerId?: string): Promise<{
   const copied = byType.get("codigo_copiado") ?? 0;
   const confirmed = byType.get("cliente_confirmou") ?? 0;
 
-  const durationExpression =
-    databaseMode === "postgres"
-      ? "EXTRACT(EPOCH FROM (p.paid_at - p.created_at)) / 3600.0"
-      : "(julianday(p.paid_at) - julianday(p.created_at)) * 24.0";
   const avgRow = await queryOne<{ horas: number | null }>(
-    `SELECT AVG(${durationExpression}) AS horas
+    `SELECT AVG(EXTRACT(EPOCH FROM (p.paid_at - p.created_at)) / 3600.0) AS horas
        FROM payments p
        JOIN charges c ON c.id = p.charge_id
       WHERE p.paid_at IS NOT NULL

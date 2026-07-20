@@ -1,11 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { extname } from "node:path";
 import { queryAll, queryOne } from "../db.js";
 import { requireProvider } from "../auth.js";
 import { track } from "../analytics.js";
 import { contestMessage, waMeLink } from "../messages.js";
 import { TransitionError, getPayment, transition } from "../state.js";
-import { isCloudStorageEnabled, readLocalReceipt, signedReceiptUrl } from "../storage.js";
+import { signedReceiptUrl } from "../storage.js";
 import type { ChargeRow, ClientRow, PaymentRow, ProviderRow } from "../types.js";
 
 interface Ctx {
@@ -156,24 +155,9 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
       if (!ctx?.payment.comprovante_path) {
         return reply.code(404).send({ error: "Comprovante não encontrado" });
       }
-      const path = ctx.payment.comprovante_path;
-      if (isCloudStorageEnabled) {
-        return reply.redirect(await signedReceiptUrl(path));
-      }
-      const ext = extname(path).toLowerCase();
-      const mime =
-        ext === ".pdf"
-          ? "application/pdf"
-          : ext === ".png"
-            ? "image/png"
-            : ext === ".webp"
-              ? "image/webp"
-              : "image/jpeg";
-      try {
-        return reply.type(mime).send(await readLocalReceipt(path));
-      } catch {
-        return reply.code(410).send({ error: "Arquivo do comprovante indisponível" });
-      }
+      return reply.redirect(
+        await signedReceiptUrl(ctx.payment.comprovante_path),
+      );
     },
   );
 

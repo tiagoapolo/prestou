@@ -8,7 +8,7 @@ import { paymentRoutes } from "./routes/payments.js";
 import { publicRoutes } from "./routes/public.js";
 import { insightRoutes } from "./routes/insights.js";
 import { runReminders } from "./reminders.js";
-import { closeDatabase, databaseMode } from "./db.js";
+import { closeDatabase } from "./db.js";
 
 export async function buildServer() {
   const app = Fastify({
@@ -52,7 +52,7 @@ if (isMain) {
   try {
     await app.listen({ port: config.port, host: "0.0.0.0" });
     app.log.info(
-      `Prestou API on :${config.port} — DB: ${databaseMode} — WhatsApp: ${config.whatsapp.mode}`,
+      `Prestou API on :${config.port} — DB: Supabase PostgreSQL — WhatsApp: ${config.whatsapp.mode}`,
     );
 
     // Em dev, roda os lembretes de hora em hora. Em produção use um cron externo

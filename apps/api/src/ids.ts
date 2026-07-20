@@ -12,8 +12,3 @@ export function newId(): string {
 export function newPublicToken(): string {
   return randomBytes(24).toString("base64url");
 }
-
-/** Token de API do prestador (Bearer). */
-export function newApiToken(): string {
-  return randomBytes(32).toString("base64url");
-}

@@ -15,10 +15,6 @@ out/
 .env.local
 .env.*.local
 
-# data (SQLite + uploads são locais, não versionados)
-apps/api/data/
-!apps/api/data/.gitkeep
-
 # logs
 *.log
 npm-debug.log*

@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { parsePixKey } from "@prestou/pix";
 import { execute, queryOne } from "../db.js";
-import { newApiToken, newId } from "../ids.js";
-import { isSupabaseAuthEnabled, requireAuthUser, requireProvider } from "../auth.js";
+import { newId } from "../ids.js";
+import { requireAuthUser, requireProvider } from "../auth.js";
 import type { ProviderRow } from "../types.js";
 
 const createProviderSchema = z.object({
@@ -41,7 +41,7 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
   /** F1 — Onboarding do prestador (assistido no piloto). */
   app.post(
     "/api/providers",
-    { preHandler: isSupabaseAuthEnabled ? requireAuthUser : undefined },
+    { preHandler: requireAuthUser },
     async (req, reply) => {
     const parsed = createProviderSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -60,25 +60,22 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const id = newId();
-    const token = isSupabaseAuthEnabled ? null : newApiToken();
     const now = new Date().toISOString();
 
-    if (req.authUser) {
-      const existing = await queryOne<ProviderRow>(
-        "SELECT * FROM providers WHERE auth_user_id = ?",
-        req.authUser.id,
-      );
-      if (existing) {
-        return reply.code(409).send({ error: "Onboarding já concluído" });
-      }
+    const existing = await queryOne<ProviderRow>(
+      "SELECT * FROM providers WHERE auth_user_id = ?",
+      req.authUser!.id,
+    );
+    if (existing) {
+      return reply.code(409).send({ error: "Onboarding já concluído" });
     }
 
     await execute(
-      `INSERT INTO providers (id, auth_user_id, email, name, profession, photo_url, city, pix_key, pix_key_type, whatsapp, api_token, consent_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO providers (id, auth_user_id, email, name, profession, photo_url, city, pix_key, pix_key_type, whatsapp, consent_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
-      req.authUser?.id ?? null,
-      req.authUser?.email ?? null,
+      req.authUser!.id,
+      req.authUser!.email,
       body.name,
       body.profession,
       body.photoUrl ?? null,
@@ -86,7 +83,6 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
       keyInfo.normalized,
       keyInfo.type,
       body.whatsapp,
-      token,
       now,
       now,
     );
@@ -97,8 +93,6 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
     ))!;
     return reply.code(201).send({
       provider: publicProvider(provider),
-      // Existe apenas no modo local/teste. Produção usa a sessão Supabase.
-      ...(token ? { apiToken: token } : {}),
     });
     },
   );

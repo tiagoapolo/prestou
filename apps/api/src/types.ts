@@ -14,7 +14,6 @@ export interface ProviderRow {
   pix_key: string;
   pix_key_type: string;
   whatsapp: string;
-  api_token: string | null;
   consent_at: string;
   created_at: string;
 }

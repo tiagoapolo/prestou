@@ -1,28 +1,61 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createClient } from "@supabase/supabase-js";
 
-// Banco isolado por execução — precisa ser definido antes de importar a app.
-const tmp = mkdtempSync(join(tmpdir(), "prestou-test-"));
-process.env.DATABASE_PATH = join(tmp, "test.db");
-process.env.UPLOADS_DIR = join(tmp, "uploads");
+const integrationEnv = {
+  databaseUrl: process.env.TEST_DATABASE_URL,
+  supabaseUrl: process.env.TEST_SUPABASE_URL,
+  anonKey: process.env.TEST_SUPABASE_ANON_KEY,
+  serviceRoleKey: process.env.TEST_SUPABASE_SERVICE_ROLE_KEY,
+};
+
+if (Object.values(integrationEnv).some((value) => !value)) {
+  test("fluxo integrado da API requer projeto Supabase de teste", {
+    skip: "Configure as variáveis TEST_* documentadas em apps/api/.env.example",
+  }, () => {});
+} else {
+process.env.DATABASE_URL = integrationEnv.databaseUrl;
+process.env.SUPABASE_URL = integrationEnv.supabaseUrl;
+process.env.SUPABASE_ANON_KEY = integrationEnv.anonKey;
+process.env.SUPABASE_SERVICE_ROLE_KEY = integrationEnv.serviceRoleKey;
 process.env.WHATSAPP_MODE = "log";
 process.env.LOG_LEVEL = "silent";
 process.env.NODE_ENV = "test";
 
 const { buildServer } = await import("../src/server.ts");
+const admin = createClient(integrationEnv.supabaseUrl!, integrationEnv.serviceRoleKey!, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+const authClient = createClient(integrationEnv.supabaseUrl!, integrationEnv.anonKey!, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 let app: Awaited<ReturnType<typeof buildServer>>;
 let token: string;
-let providerId: string;
+const authUserIds: string[] = [];
+
+async function createAuthUser(label: string): Promise<string> {
+  const email = `prestou-test-${label}-${crypto.randomUUID()}@example.com`;
+  const password = `T3st-${crypto.randomUUID()}!`;
+  const created = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  assert.ifError(created.error);
+  authUserIds.push(created.data.user!.id);
+  const signedIn = await authClient.auth.signInWithPassword({ email, password });
+  assert.ifError(signedIn.error);
+  return signedIn.data.session!.access_token;
+}
 
 before(async () => {
   app = await buildServer();
+  token = await createAuthUser("primary");
   const res = await app.inject({
     method: "POST",
     url: "/api/providers",
+    headers: auth(),
     payload: {
       name: "João Jardineiro",
       profession: "Jardinagem",
@@ -34,15 +67,14 @@ before(async () => {
   });
   assert.equal(res.statusCode, 201);
   const body = res.json();
-  token = body.apiToken;
-  providerId = body.provider.id;
-  assert.ok(token);
   assert.equal(body.provider.pixKeyType, "phone");
 });
 
 after(async () => {
   await app.close();
-  rmSync(tmp, { recursive: true, force: true });
+  await Promise.all(
+    authUserIds.map((id) => admin.auth.admin.deleteUser(id)),
+  );
 });
 
 function auth() {
@@ -75,6 +107,7 @@ test("F1 — rejeita onboarding com chave Pix inválida", async () => {
   const res = await app.inject({
     method: "POST",
     url: "/api/providers",
+    headers: auth(),
     payload: {
       name: "Teste",
       profession: "Teste",
@@ -228,9 +261,11 @@ test("cliente confirmando duas vezes não quebra nem duplica estado", async () =
 
 test("prestador não acessa parcela de outro prestador", async () => {
   const charge = await createCharge();
+  const otherToken = await createAuthUser("other");
   const other = await app.inject({
     method: "POST",
     url: "/api/providers",
+    headers: { authorization: `Bearer ${otherToken}` },
     payload: {
       name: "Outro Prestador",
       profession: "Lavagem",
@@ -239,7 +274,7 @@ test("prestador não acessa parcela de outro prestador", async () => {
       consent: true,
     },
   });
-  const otherToken = other.json().apiToken;
+  assert.equal(other.statusCode, 201);
 
   const res = await app.inject({
     method: "POST",
@@ -295,3 +330,4 @@ test("F8 — lembretes disparam no vencimento e são idempotentes no dia", async
   const second = await runReminders("2026-07-19");
   assert.equal(second.sent, 0, "não deve reenviar o mesmo lembrete no mesmo dia");
 });
+}
