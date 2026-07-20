@@ -66,7 +66,7 @@ supabase/migrations/    schema PostgreSQL e configuração do bucket privado
 ## Requisitos
 
 - Node.js LTS, versão 20 ou superior;
-- npm;
+- pnpm 11.9.0 (fixado no `packageManager` da raiz);
 - projeto Supabase;
 - conta Railway para publicação;
 - WABA/Meta Cloud API somente para o envio real de WhatsApp.
@@ -74,7 +74,8 @@ supabase/migrations/    schema PostgreSQL e configuração do bucket privado
 ## Instalação
 
 ```bash
-npm install
+corepack enable
+pnpm install --frozen-lockfile
 ```
 
 ## Desenvolvimento local
@@ -91,13 +92,13 @@ cp apps/web/.env.example apps/web/.env.local
 Inicie a API:
 
 ```bash
-npm run dev:api
+pnpm dev:api
 ```
 
 Em outro terminal, inicie o site:
 
 ```bash
-npm run dev:web
+pnpm dev:web
 ```
 
 - Site: `http://localhost:3000`
@@ -195,19 +196,19 @@ No MVP, a automação é estritamente Prestou → prestador. Mensagens ao client
 Execute typecheck, build e testes unitários:
 
 ```bash
-npm test
-npm run typecheck
-npm run build --workspace @prestou/web
+pnpm test
+pnpm typecheck
+pnpm --filter @prestou/web build
 ```
 
-O build da API executa automaticamente o build de `@prestou/pix`. Em deploys Railway separados, use:
+O filtro da API inclui sua dependência `@prestou/pix`. Em deploys Railway separados, use:
 
 ```bash
 # Serviço da API
-npm run build --workspace @prestou/api
+pnpm --filter @prestou/api... build
 
 # Serviço do site
-npm run build --workspace @prestou/web
+pnpm --filter @prestou/web build
 ```
 
 Os testes do pacote Pix sempre são executados. Os testes integrados da API exigem um projeto Supabase separado e as quatro variáveis `TEST_*` descritas em `apps/api/.env.example`; sem elas, o runner os marca como ignorados. Nunca execute a suíte integrada contra o projeto de produção.
@@ -256,7 +257,7 @@ Antes do deploy da API, configure pelo menos `DATABASE_URL`, `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_WEB_URL`,
 `CORS_ORIGINS` e `CRON_SECRET`. No Web, configure `VITE_API_URL` com o domínio
 HTTPS público da API. O Railway fornece `PORT` automaticamente. Não use
-`npm run dev:web` em produção.
+`pnpm dev:web` em produção.
 
 ## Decisões técnicas
 
@@ -266,6 +267,7 @@ HTTPS público da API. O Railway fornece `PORT` automaticamente. Não use
 - [ADR-004 — Componentes com shadcn/ui](./specs/decisoes/ADR-004-componentes-shadcn-ui.md)
 - [ADR-005 — Supabase como ambiente único de dados](./specs/decisoes/ADR-005-supabase-como-ambiente-unico-de-dados.md)
 - [ADR-006 — Deploy Railway por nome do serviço](./specs/decisoes/ADR-006-deploy-railway-por-servico.md)
+- [ADR-007 — pnpm para gestão do monorepo](./specs/decisoes/ADR-007-pnpm-para-o-monorepo.md)
 
 ## Segurança
 

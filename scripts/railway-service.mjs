@@ -30,12 +30,13 @@ if (!service) {
 }
 
 const workspace = `@prestou/${service}`;
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const args = ["run", phase, "--workspace", workspace];
+const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const filter = phase === "build" && service === "api" ? `${workspace}...` : workspace;
+const args = ["--filter", filter, phase];
 
 console.log(`[railway] ${phase} do serviço ${configuredService} via ${workspace}`);
 
-const child = spawn(npmCommand, args, {
+const child = spawn(pnpmCommand, args, {
   env: process.env,
   stdio: "inherit",
 });
@@ -45,7 +46,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 child.once("error", (error) => {
-  console.error(`[railway] Falha ao executar npm: ${error.message}`);
+  console.error(`[railway] Falha ao executar pnpm: ${error.message}`);
   process.exit(1);
 });
 

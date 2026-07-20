@@ -14,7 +14,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test test/*.test.ts",
+    "test": "pnpm run build && node --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "license": "UNLICENSED"

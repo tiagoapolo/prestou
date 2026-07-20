@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "node --env-file=.env --import tsx --watch src/server.ts",
     "start": "node dist/server.js",
-    "prebuild": "npm run build --workspace @prestou/pix",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test --import tsx test/*.test.ts"
@@ -14,8 +13,8 @@
   "dependencies": {
     "@fastify/cors": "^10.0.1",
     "@fastify/multipart": "^9.0.1",
-    "@fastify/static": "^8.0.3",
-    "@prestou/pix": "*",
+    "@fastify/static": "^10.1.0",
+    "@prestou/pix": "workspace:*",
     "@supabase/supabase-js": "^2.110.7",
     "fastify": "^5.1.0",
     "postgres": "^3.4.9",

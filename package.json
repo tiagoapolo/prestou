@@ -3,25 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "description": "Prestou — MVP de cobrança via Pix para prestadores de serviço informais",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "start": "npm run start --workspace @prestou/api",
-    "start:web": "npm run start --workspace @prestou/web",
+    "start": "pnpm --filter @prestou/api start",
+    "start:web": "pnpm --filter @prestou/web start",
     "railway:build": "node scripts/railway-service.mjs build",
     "railway:start": "node scripts/railway-service.mjs start",
-    "build": "npm run build --workspace @prestou/api && npm run build --workspace @prestou/web",
-    "build:pix": "npm run build --workspace @prestou/pix",
-    "test:pix": "npm run test --workspace @prestou/pix",
-    "dev:api": "npm run dev --workspace @prestou/api",
-    "dev:web": "npm run dev --workspace @prestou/web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "build": "pnpm -r --if-present build",
+    "build:pix": "pnpm --filter @prestou/pix build",
+    "test:pix": "pnpm --filter @prestou/pix test",
+    "dev:api": "pnpm --filter @prestou/api dev",
+    "dev:web": "pnpm --filter @prestou/web dev",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "pnpm": ">=11.9.0"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

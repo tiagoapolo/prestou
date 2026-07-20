@@ -37,7 +37,7 @@ script `start` da raiz, iniciava a API e falhava por não possuir `DATABASE_URL`
 
 - API e Web podem continuar como serviços Railway separados ligados ao mesmo
   repositório e à branch `main`.
-- O diretório raiz permanece `/`, preservando npm workspaces e o lockfile único.
+- O diretório raiz permanece `/`, preservando os workspaces pnpm e o lockfile único.
 - Um serviço desconhecido falha com uma mensagem explícita, em vez de executar a
   API por padrão.
 - O health check comum é `GET /health`; a API expõe a rota e o servidor SPA do
