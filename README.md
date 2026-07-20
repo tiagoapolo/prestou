@@ -85,7 +85,7 @@ O desenvolvimento usa o mesmo PostgreSQL, Auth e Storage do Supabase utilizados 
 Copie e preencha os exemplos:
 
 ```bash
-cp apps/api/.env.example apps/api/.env
+cp apps/api/.env.example apps/api/.env.local
 cp apps/web/.env.example apps/web/.env.local
 ```
 

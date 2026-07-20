@@ -5,7 +5,7 @@
   "description": "Prestou — MVP de cobrança via Pix para prestadores de serviço informais",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "start": "node apps/api/dist/server.js",
+    "start": "node --env-file-if-exists=apps/api/.env.local apps/api/dist/server.js",
     "start:web": "node apps/web/node_modules/serve/build/main.js -s apps/web/dist -l tcp://0.0.0.0:${PORT:-3000}",
     "railway:build": "node scripts/railway-service.mjs build",
     "railway:start": "node scripts/railway-service.mjs start",
