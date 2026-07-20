@@ -238,24 +238,25 @@ O processamento é idempotente por pagamento e dia.
 
 ## Railway
 
-O [`railway.json`](./railway.json) da raiz descreve o serviço da API:
+O [`railway.json`](./railway.json) da raiz atende os dois serviços. O script de
+deploy usa `RAILWAY_SERVICE_NAME`, fornecido automaticamente pelo Railway, para
+selecionar o workspace correto:
 
-- build: `npm run build --workspace @prestou/api`;
-- start: `npm start`;
-- health check: `GET /health`;
+- `@prestou/api`: build e start do workspace da API;
+- `@prestou/web`: build e start do workspace do site;
+- health check comum: `GET /health`;
 - restart automático em caso de falha.
 
-Antes do deploy, configure no serviço pelo menos `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_WEB_URL`, `CORS_ORIGINS` e `CRON_SECRET`. O Railway fornece `PORT` automaticamente.
+Mantenha os nomes dos serviços como `@prestou/api` e `@prestou/web`. Se precisar
+renomeá-los, defina `PRESTOU_RAILWAY_SERVICE=api` ou
+`PRESTOU_RAILWAY_SERVICE=web` no serviço correspondente. Um nome desconhecido
+interrompe o deploy com uma mensagem explícita, sem iniciar o workspace errado.
 
-O [`railway.web.json`](./railway.web.json) descreve o serviço separado do site:
-
-- build: `npm run build --workspace @prestou/web`;
-- start: `npm run start --workspace @prestou/web`;
-- servidor estático escutando `0.0.0.0:$PORT`;
-- fallback SPA para rotas como `/pay/:token`;
-- health check: `GET /`.
-
-No serviço web do Railway, configure **Railway Config File** como `railway.web.json`. Não use `npm run dev:web` em produção.
+Antes do deploy da API, configure pelo menos `DATABASE_URL`, `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_WEB_URL`,
+`CORS_ORIGINS` e `CRON_SECRET`. No Web, configure `VITE_API_URL` com o domínio
+HTTPS público da API. O Railway fornece `PORT` automaticamente. Não use
+`npm run dev:web` em produção.
 
 ## Decisões técnicas
 
@@ -264,6 +265,7 @@ No serviço web do Railway, configure **Railway Config File** como `railway.web.
 - [ADR-003 — Site mobile comum, sem PWA](./specs/decisoes/ADR-003-site-mobile-sem-pwa.md)
 - [ADR-004 — Componentes com shadcn/ui](./specs/decisoes/ADR-004-componentes-shadcn-ui.md)
 - [ADR-005 — Supabase como ambiente único de dados](./specs/decisoes/ADR-005-supabase-como-ambiente-unico-de-dados.md)
+- [ADR-006 — Deploy Railway por nome do serviço](./specs/decisoes/ADR-006-deploy-railway-por-servico.md)
 
 ## Segurança
 

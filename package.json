@@ -10,6 +10,8 @@
   "scripts": {
     "start": "npm run start --workspace @prestou/api",
     "start:web": "npm run start --workspace @prestou/web",
+    "railway:build": "node scripts/railway-service.mjs build",
+    "railway:start": "node scripts/railway-service.mjs start",
     "build": "npm run build --workspace @prestou/api && npm run build --workspace @prestou/web",
     "build:pix": "npm run build --workspace @prestou/pix",
     "test:pix": "npm run test --workspace @prestou/pix",

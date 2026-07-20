@@ -56,7 +56,7 @@ O MVP deve minimizar trabalho de infraestrutura que não testa a hipótese de pr
 | API Fastify | Autorização, Pix, cobranças, estados, analytics, lembretes e WhatsApp |
 | Supabase PostgreSQL | Persistência transacional e auditoria |
 | Supabase Storage | Comprovantes privados, com retenção e acesso temporário |
-| Railway | Hospedagem da API/PWA e cron de lembretes |
+| Railway | Hospedagem da API/site mobile e cron de lembretes |
 | Meta Cloud API | Notificação Prestou → prestador |
 
 ## Regras de segurança
