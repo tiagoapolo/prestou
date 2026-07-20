@@ -247,6 +247,16 @@ O [`railway.json`](./railway.json) da raiz descreve o serviço da API:
 
 Antes do deploy, configure no serviço pelo menos `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_WEB_URL`, `CORS_ORIGINS` e `CRON_SECRET`. O Railway fornece `PORT` automaticamente.
 
+O [`railway.web.json`](./railway.web.json) descreve o serviço separado do site:
+
+- build: `npm run build --workspace @prestou/web`;
+- start: `npm run start --workspace @prestou/web`;
+- servidor estático escutando `0.0.0.0:$PORT`;
+- fallback SPA para rotas como `/pay/:token`;
+- health check: `GET /`.
+
+No serviço web do Railway, configure **Railway Config File** como `railway.web.json`. Não use `npm run dev:web` em produção.
+
 ## Decisões técnicas
 
 - [ADR-001 — Arquitetura híbrida Supabase + Railway](./specs/decisoes/ADR-001-arquitetura-hibrida-supabase-railway.md)

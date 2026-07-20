@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "serve -s dist -l tcp://0.0.0.0:${PORT:-3000}",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false"
   },
@@ -30,6 +31,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
+    "serve": "^14.2.6",
     "tailwind-merge": "^3.6.0"
   }
 }
