@@ -65,7 +65,7 @@ supabase/migrations/    schema PostgreSQL e configuração do bucket privado
 
 ## Requisitos
 
-- Node.js LTS, versão 20 ou superior;
+- Node.js 22 LTS (fixado em `.nvmrc` e `engines`);
 - pnpm 11.9.0 (fixado no `packageManager` da raiz);
 - projeto Supabase;
 - conta Railway para publicação;

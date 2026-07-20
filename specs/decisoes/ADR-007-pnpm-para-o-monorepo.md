@@ -20,6 +20,10 @@ Usar pnpm como gerenciador exclusivo do monorepo, com a versão `11.9.0` fixada
 no campo `packageManager` da raiz e workspaces declarados em
 `pnpm-workspace.yaml`.
 
+Fixar o runtime de build e produção em Node.js 22 LTS por `.nvmrc` e
+`engines.node`, evitando que o Railway selecione automaticamente uma versão
+Node 24 incompatível com a execução do pnpm naquele ambiente.
+
 Cada aplicação e pacote mantém seu próprio `package.json`. A raiz apenas
 orquestra comandos compartilhados e não concentra dependências específicas dos
 workspaces.
@@ -42,6 +46,7 @@ declarar seus próprios scripts, dependências e metadados.
 - Builds direcionados usam `pnpm --filter`; o filtro `@prestou/api...` inclui o
   pacote Pix do qual a API depende.
 - Railway detecta pnpm pelo lockfile e pela versão fixada em `packageManager`.
+- Railway usa Node.js 22 LTS, sem resolução flutuante de `nodejs lts`.
 - Instalações reproduzíveis usam `pnpm install --frozen-lockfile`.
 - Scripts de instalação de dependências ficam bloqueados por padrão; somente
   `esbuild`, necessário ao Vite, está explicitamente autorizado.

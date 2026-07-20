@@ -5,8 +5,8 @@
   "description": "Prestou — MVP de cobrança via Pix para prestadores de serviço informais",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "start": "pnpm --filter @prestou/api start",
-    "start:web": "pnpm --filter @prestou/web start",
+    "start": "node apps/api/dist/server.js",
+    "start:web": "node apps/web/node_modules/serve/build/main.js -s apps/web/dist -l tcp://0.0.0.0:${PORT:-3000}",
     "railway:build": "node scripts/railway-service.mjs build",
     "railway:start": "node scripts/railway-service.mjs start",
     "build": "pnpm -r --if-present build",
@@ -18,7 +18,7 @@
     "test": "pnpm -r --if-present test"
   },
   "engines": {
-    "node": ">=20",
+    "node": "22.x",
     "pnpm": ">=11.9.0"
   },
   "devDependencies": {

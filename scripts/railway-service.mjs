@@ -30,13 +30,27 @@ if (!service) {
 }
 
 const workspace = `@prestou/${service}`;
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-const filter = phase === "build" && service === "api" ? `${workspace}...` : workspace;
-const args = ["--filter", filter, phase];
+const isBuild = phase === "build";
+const command = isBuild
+  ? process.platform === "win32"
+    ? "pnpm.cmd"
+    : "pnpm"
+  : process.execPath;
+const args = isBuild
+  ? ["--filter", service === "api" ? `${workspace}...` : workspace, "build"]
+  : service === "api"
+    ? ["apps/api/dist/server.js"]
+    : [
+        "apps/web/node_modules/serve/build/main.js",
+        "-s",
+        "apps/web/dist",
+        "-l",
+        `tcp://0.0.0.0:${process.env.PORT ?? "3000"}`,
+      ];
 
 console.log(`[railway] ${phase} do serviço ${configuredService} via ${workspace}`);
 
-const child = spawn(pnpmCommand, args, {
+const child = spawn(command, args, {
   env: process.env,
   stdio: "inherit",
 });
@@ -46,7 +60,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 child.once("error", (error) => {
-  console.error(`[railway] Falha ao executar pnpm: ${error.message}`);
+  console.error(`[railway] Falha ao executar ${phase}: ${error.message}`);
   process.exit(1);
 });
 
