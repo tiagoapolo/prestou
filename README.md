@@ -200,6 +200,16 @@ npm run typecheck
 npm run build --workspace @prestou/web
 ```
 
+O build da API executa automaticamente o build de `@prestou/pix`. Em deploys Railway separados, use:
+
+```bash
+# Serviço da API
+npm run build --workspace @prestou/api
+
+# Serviço do site
+npm run build --workspace @prestou/web
+```
+
 Os testes do pacote Pix sempre são executados. Os testes integrados da API exigem um projeto Supabase separado e as quatro variáveis `TEST_*` descritas em `apps/api/.env.example`; sem elas, o runner os marca como ignorados. Nunca execute a suíte integrada contra o projeto de produção.
 
 Com um projeto de teste configurado, a suíte cobre fluxo feliz, isolamento entre prestadores, concorrência de estados, contestação, pagamento manual, painel, analytics e idempotência dos lembretes.

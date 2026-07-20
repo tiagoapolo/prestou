@@ -8,6 +8,7 @@
     "apps/*"
   ],
   "scripts": {
+    "build": "npm run build --workspace @prestou/api && npm run build --workspace @prestou/web",
     "build:pix": "npm run build --workspace @prestou/pix",
     "test:pix": "npm run test --workspace @prestou/pix",
     "dev:api": "npm run dev --workspace @prestou/api",
