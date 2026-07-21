@@ -2,7 +2,7 @@ import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { userMessage } from "./errors";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Settings } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
@@ -48,7 +48,10 @@ export function AppShell() {
     <div className="app-shell">
       <header className="topbar">
         <Link to="/" className="brand">prestou<span>.</span></Link>
-        <Button variant="ghost" size="sm" onClick={handleSignOut} aria-label="Sair">Sair</Button>
+        <div className="topbar-actions">
+          <Button asChild variant="ghost" size="sm"><Link to="/configuracoes"><Settings aria-hidden="true" />Configurações</Link></Button>
+          <Button variant="ghost" size="sm" onClick={handleSignOut} aria-label="Sair">Sair</Button>
+        </div>
       </header>
       {error && <div className="shell-error"><ErrorNotice message={error} /></div>}
       <main className="app-content"><Outlet /></main>

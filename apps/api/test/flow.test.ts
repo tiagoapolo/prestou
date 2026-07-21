@@ -119,6 +119,47 @@ test("F1 — rejeita onboarding com chave Pix inválida", async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test("prestador consulta e altera apenas suas configurações de recebimento", async () => {
+  const current = await app.inject({
+    method: "GET",
+    url: "/api/providers/me/settings",
+    headers: auth(),
+  });
+  assert.equal(current.statusCode, 200);
+  assert.equal(current.json().settings.pixKey, "+5511999998888");
+
+  const updated = await app.inject({
+    method: "PATCH",
+    url: "/api/providers/me/settings",
+    headers: auth(),
+    payload: {
+      pixKey: "joao@prestou.com",
+      whatsapp: "(11) 97777-6655",
+    },
+  });
+  assert.equal(updated.statusCode, 200);
+  assert.deepEqual(updated.json().settings, {
+    pixKey: "joao@prestou.com",
+    whatsapp: "11977776655",
+  });
+
+  const provider = await app.inject({
+    method: "GET",
+    url: "/api/providers/me",
+    headers: auth(),
+  });
+  assert.equal(provider.json().provider.pixKeyType, "email");
+  assert.equal(provider.json().provider.whatsapp, "11977776655");
+
+  const invalid = await app.inject({
+    method: "PATCH",
+    url: "/api/providers/me/settings",
+    headers: auth(),
+    payload: { pixKey: "inválida", whatsapp: "11977776655" },
+  });
+  assert.equal(invalid.statusCode, 400);
+});
+
 test("F2/F3 — cria cobrança com BR Code e mensagem pronta", async () => {
   const body = await createCharge();
   assert.equal(body.payment.status, "em_aberto");

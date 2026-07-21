@@ -27,6 +27,11 @@ const createProviderSchema = z.object({
   }),
 });
 
+const updateSettingsSchema = z.object({
+  whatsapp: mobileSchema,
+  pixKey: requiredText("Chave Pix", 3, 80),
+});
+
 function publicProvider(p: ProviderRow) {
   return {
     id: p.id,
@@ -143,5 +148,50 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
   /** Prestador autenticado (usado pelo painel para render do cabeçalho). */
   app.get("/api/providers/me", { preHandler: requireProvider }, async (req) => {
     return { provider: publicProvider(req.provider!) };
+  });
+
+  app.get("/api/providers/me/settings", { preHandler: requireProvider }, async (req) => {
+    return {
+      settings: {
+        pixKey: req.provider!.pix_key,
+        whatsapp: req.provider!.whatsapp,
+      },
+    };
+  });
+
+  app.patch("/api/providers/me/settings", { preHandler: requireProvider }, async (req, reply) => {
+    const parsed = updateSettingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: validationMessage(parsed.error),
+        issues: parsed.error.issues,
+      });
+    }
+
+    let keyInfo;
+    try {
+      keyInfo = parsePixKey(parsed.data.pixKey);
+    } catch {
+      return reply.code(400).send({
+        error: "Chave Pix inválida. Confira o formato e tente novamente.",
+      });
+    }
+
+    await execute(
+      `UPDATE providers
+       SET pix_key = ?, pix_key_type = ?, whatsapp = ?
+       WHERE id = ?`,
+      keyInfo.normalized,
+      keyInfo.type,
+      parsed.data.whatsapp,
+      req.provider!.id,
+    );
+
+    return {
+      settings: {
+        pixKey: keyInfo.normalized,
+        whatsapp: parsed.data.whatsapp,
+      },
+    };
   });
 }

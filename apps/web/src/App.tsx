@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/Login";
 import { NewChargePage } from "./pages/NewCharge";
 import { OnboardingPage } from "./pages/Onboarding";
 import { PublicPaymentPage } from "./pages/PublicPayment";
+import { SettingsPage } from "./pages/Settings";
 
 function PrivateApp() {
   const auth = useAuth();
@@ -20,6 +21,7 @@ function PrivateApp() {
         <Route index element={<DashboardPage />} />
         <Route path="nova" element={<NewChargePage />} />
         <Route path="cobranca/:id" element={<ChargeDetailPage />} />
+        <Route path="configuracoes" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
