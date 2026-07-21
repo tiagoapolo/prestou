@@ -41,13 +41,28 @@ export function ChargeDetailPage() {
     }
   }
 
+  async function openReceipt() {
+    if (!detail?.comprovanteUrl) return;
+    const receiptWindow = window.open("about:blank", "_blank");
+    if (receiptWindow) receiptWindow.opener = null;
+    setBusy(true); setMessage("");
+    try {
+      const result = await api<{ url: string }>(detail.comprovanteUrl);
+      if (receiptWindow) receiptWindow.location.replace(result.url);
+      else window.location.assign(result.url);
+    } catch (e) {
+      receiptWindow?.close();
+      setMessage(userMessage(e, "Não foi possível carregar o comprovante. Tente novamente."));
+    } finally { setBusy(false); }
+  }
+
   if (message && !detail) return <ErrorNotice message={message} />;
   if (!detail) return <Spinner />;
   return <div className="page"><div className="back-title"><Link to="/">←</Link><div><p className="eyebrow">Detalhe da cobrança</p><h1>{detail.client.name}</h1></div></div>
     <Card className="detail-card">
       <div className="detail-value"><span>{detail.description}</span><strong>{detail.amountLabel}</strong></div>
       <dl><div><dt>Vencimento</dt><dd>{new Date(`${detail.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}</dd></div><div><dt>Status</dt><dd><Badge variant="secondary" className={`badge ${detail.status}`}>{detail.status.replace("cliente_confirmou", "aguardando validação").replace("em_aberto", "em aberto")}</Badge></dd></div></dl>
-      {detail.comprovanteUrl && <a className="receipt-link" href={detail.comprovanteUrl} target="_blank" rel="noreferrer">Ver comprovante anexado ↗</a>}
+      {detail.comprovanteUrl && <Button variant="ghost" className="receipt-link" disabled={busy} onClick={openReceipt}>Ver comprovante anexado ↗</Button>}
     </Card>
     {message && <ErrorNotice message={message} />}
     <div className="action-stack">

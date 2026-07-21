@@ -158,9 +158,9 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
       if (!ctx?.payment.comprovante_path) {
         return reply.code(404).send({ error: "Comprovante não encontrado" });
       }
-      return reply.redirect(
-        await signedReceiptUrl(ctx.payment.comprovante_path),
-      );
+      return {
+        url: await signedReceiptUrl(ctx.payment.comprovante_path),
+      };
     },
   );
 
