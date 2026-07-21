@@ -13,10 +13,10 @@ export function PrivacyPage() {
         <p>Do prestador, usamos dados de identificação e contato, profissão, chave Pix e informações necessárias para manter a conta. Dos clientes, usamos somente nome e WhatsApp, além dos dados da cobrança. O comprovante é opcional e só pode ser consultado pelo prestador responsável.</p>
 
         <h2>Para que usamos</h2>
-        <p>Usamos os dados para criar e acompanhar cobranças, gerar o Pix, preparar mensagens, enviar notificações ao prestador, proteger o acesso e medir se o piloto funciona. Não vendemos dados pessoais.</p>
+        <p>Usamos os dados para criar e acompanhar cobranças, gerar o Pix, preparar mensagens, enviar notificações ao prestador, proteger o acesso e medir se o piloto funciona. Quando o prestador usa o assistente experimental, o texto digitado é processado para preencher um rascunho que precisa ser revisado antes da criação. Não vendemos dados pessoais.</p>
 
         <h2>Com quem compartilhamos</h2>
-        <p>Usamos fornecedores de infraestrutura estritamente para operar o serviço: Supabase para autenticação, banco e armazenamento; Railway para hospedar a aplicação; e Meta/WhatsApp para notificações quando essa integração estiver ativa.</p>
+        <p>Usamos fornecedores estritamente para operar o serviço: Supabase para autenticação, banco e armazenamento; Railway para hospedar a aplicação; OpenAI para interpretar somente o texto enviado ao assistente; e Meta/WhatsApp para notificações quando essa integração estiver ativa. A agenda completa de clientes, a chave Pix e os comprovantes não são enviados ao assistente.</p>
 
         <h2>Por quanto tempo guardamos</h2>
         <p>Comprovantes são apagados 90 dias depois que a cobrança é marcada como paga. Enquanto a cobrança estiver aberta ou em validação, o arquivo é mantido para cumprir sua finalidade. Os demais dados permanecem enquanto a conta estiver ativa ou pelo tempo necessário para atender obrigações aplicáveis.</p>

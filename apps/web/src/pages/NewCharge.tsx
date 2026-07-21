@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { ErrorNotice } from "../components";
 import { Button } from "@/components/ui/button";
@@ -12,19 +12,30 @@ import { userMessage } from "../errors";
 
 interface Client { id: string; name: string; whatsapp: string }
 interface Created { payment: { id: string }; whatsapp: { deeplink: string; message: string } }
+interface AssistantDraft {
+  client: { id?: string; name: string; whatsapp: string };
+  description: string;
+  amountCents: number;
+  dueDate: string;
+  startedAt: number;
+}
 
 export function NewChargePage() {
-  const started = useRef(Date.now());
+  const location = useLocation();
+  const assistantDraft = (location.state as { assistantDraft?: AssistantDraft } | null)?.assistantDraft;
+  const started = useRef(assistantDraft?.startedAt ?? Date.now());
   const [clients, setClients] = useState<Client[]>([]);
   const [clientsLoading, setClientsLoading] = useState(true);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(assistantDraft?.client.id ?? "");
   const [created, setCreated] = useState<Created | null>(null);
   const [busy, setBusy] = useState(false);
   const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
   const [error, setError] = useState("");
-  const [clientWhatsapp, setClientWhatsapp] = useState("");
-  const [amount, setAmount] = useState("");
-  const [dueDate, setDueDate] = useState(() => isoToDate(new Date().toISOString().slice(0, 10)));
+  const [clientName, setClientName] = useState(assistantDraft?.client.name ?? "");
+  const [clientWhatsapp, setClientWhatsapp] = useState(() => formatMobile(assistantDraft?.client.whatsapp ?? ""));
+  const [description, setDescription] = useState(assistantDraft?.description ?? "");
+  const [amount, setAmount] = useState(() => assistantDraft ? formatMoney(String(assistantDraft.amountCents)) : "");
+  const [dueDate, setDueDate] = useState(() => isoToDate(assistantDraft?.dueDate ?? new Date().toISOString().slice(0, 10)));
   useEffect(() => {
     api<{ clients: Client[] }>("/api/clients")
       .then((response) => setClients(response.clients))
@@ -56,7 +67,7 @@ export function NewChargePage() {
     }
     const client = selected ? { id: selected } : { name: clientName, whatsapp: normalizeMobile(clientWhatsapp) };
     try {
-      const result = await api<Created>("/api/charges", { method: "POST", body: JSON.stringify({ client, description, amountCents, dueDate: dueDateISO, fillMs: Date.now() - started.current }) });
+      const result = await api<Created>("/api/charges", { method: "POST", body: JSON.stringify({ client, description, amountCents, dueDate: dueDateISO, fillMs: Date.now() - started.current, source: assistantDraft ? "assistant" : "form" }) });
       setCreated(result);
     } catch (err) { setError(userMessage(err, "Não foi possível criar a cobrança. Tente novamente.")); }
     finally { setBusy(false); }
@@ -80,8 +91,8 @@ export function NewChargePage() {
   return <div className="page"><div className="back-title"><Link to="/">←</Link><div><p className="eyebrow">Meta: menos de 60 segundos</p><h1>Nova cobrança</h1></div></div>
     <Card asChild className="form-card"><form className="stack" onSubmit={submit}>
       <Label>Cliente já cadastrado<Select disabled={clientsLoading} value={clientsLoading ? "loading" : selected || "new"} onValueChange={(value) => setSelected(value === "new" ? "" : value)}><SelectTrigger aria-label={clientsLoading ? "Carregando clientes" : "Selecionar cliente"}><SelectValue /></SelectTrigger><SelectContent>{clientsLoading ? <SelectItem value="loading">Carregando clientes…</SelectItem> : <><SelectItem value="new">Novo cliente</SelectItem>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} · {c.whatsapp}</SelectItem>)}</>}</SelectContent></Select></Label>
-      {!selected && <div className="two-fields"><Label>Nome do cliente<Input name="clientName" required minLength={2} maxLength={80} /></Label><Label>WhatsApp<Input name="clientWhatsapp" inputMode="numeric" autoComplete="tel-national" required placeholder="(11) 99999-9999" value={clientWhatsapp} onChange={(event) => setClientWhatsapp(formatMobile(event.target.value))} maxLength={15} pattern="\([1-9][0-9]\) 9[0-9]{4}-[0-9]{4}" title="Informe um celular válido com DDD" /></Label></div>}
-      <Label>Serviço<Input name="description" required minLength={2} maxLength={120} placeholder="Ex.: corte de grama" /></Label>
+      {!selected && <div className="two-fields"><Label>Nome do cliente<Input name="clientName" required minLength={2} maxLength={80} value={clientName} onChange={(event) => setClientName(event.target.value)} /></Label><Label>WhatsApp<Input name="clientWhatsapp" inputMode="numeric" autoComplete="tel-national" required placeholder="(11) 99999-9999" value={clientWhatsapp} onChange={(event) => setClientWhatsapp(formatMobile(event.target.value))} maxLength={15} pattern="\([1-9][0-9]\) 9[0-9]{4}-[0-9]{4}" title="Informe um celular válido com DDD" /></Label></div>}
+      <Label>Serviço<Input name="description" required minLength={2} maxLength={120} placeholder="Ex.: corte de grama" value={description} onChange={(event) => setDescription(event.target.value)} /></Label>
       <div className="two-fields"><Label>Valor (R$)<Input name="amount" required inputMode="numeric" placeholder="150,00" value={amount} onChange={(event) => setAmount(formatMoney(event.target.value))} maxLength={9} /></Label><Label>Vencimento<Input name="dueDate" required inputMode="numeric" placeholder="DD/MM/AAAA" value={dueDate} onChange={(event) => setDueDate(formatDate(event.target.value))} maxLength={10} pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" title="Informe uma data válida no formato DD/MM/AAAA" /></Label></div>
       {error && <ErrorNotice message={error} />}
       <Button loading={busy} loadingLabel="Criando…">Criar e preparar mensagem</Button>

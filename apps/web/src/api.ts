@@ -34,6 +34,9 @@ function responseError(response: Response, payload: ErrorPayload): ApiError {
   if (response.status === 429) {
     return new ApiError("Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.", 429, code);
   }
+  if (response.status === 503 && code === "ASSISTANT_UNAVAILABLE" && serverMessage) {
+    return new ApiError(serverMessage, 503, code);
+  }
   if (response.status >= 500) {
     return new ApiError(GENERIC_ERROR, response.status, code ?? "INTERNAL_ERROR");
   }

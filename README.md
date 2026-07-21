@@ -273,7 +273,9 @@ executada com Node.js 24.
 
 Antes do deploy da API, configure pelo menos `DATABASE_URL`, `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLIC_WEB_URL`,
-`CORS_ORIGINS` e `CRON_SECRET`. No Web, configure `VITE_API_URL` com o domínio
+`CORS_ORIGINS`, `CRON_SECRET` e `OPENAI_API_KEY`. O assistente usa
+`gpt-5.4-nano` por padrão; sem a chave, o endpoint responde como indisponível.
+No Web, configure `VITE_API_URL` com o domínio
 HTTPS público da API. O Railway fornece `PORT` automaticamente. Não use
 `pnpm dev:web` em produção.
 

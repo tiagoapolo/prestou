@@ -32,5 +32,10 @@ export const config = {
     receiptsBucket: env("SUPABASE_RECEIPTS_BUCKET", "receipts"),
     signedUrlTtlSeconds: Number(env("SIGNED_URL_TTL_SECONDS", "300")),
   },
+  openai: {
+    apiKey: env("OPENAI_API_KEY"),
+    model: env("OPENAI_MODEL", "gpt-5.4-nano"),
+    timeoutMs: Number(env("OPENAI_TIMEOUT_MS", "15000")),
+  },
   cronSecret: env("CRON_SECRET"),
 } as const;

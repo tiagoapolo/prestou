@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { ErrorNotice, Spinner } from "../components";
 import type { ChargeItem, DashboardData, PaymentStatus } from "../types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { userMessage } from "../errors";
 
 const labels: Record<PaymentStatus, string> = {
@@ -16,6 +16,7 @@ const brl = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "c
 const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [filter, setFilter] = useState<"todas" | PaymentStatus>("todas");
   const [error, setError] = useState("");
@@ -32,6 +33,9 @@ export function DashboardPage() {
         <Card className="summary-card receive"><span>A receber</span><strong>{brl(data.totals.aReceberCents)}</strong></Card>
         <Card className="summary-card paid"><span>Recebido</span><strong>{brl(data.totals.recebidoMesCents)}</strong></Card>
       </section>
+      <AssistantCommand onDraft={(draft, startedAt) => navigate("/nova", {
+        state: { assistantDraft: { ...draft, startedAt } },
+      })} />
       {(data.totals.atrasadasCount > 0 || data.totals.aguardandoValidacaoCount > 0) && (
         <div className="attention-strip">
           {data.totals.aguardandoValidacaoCount > 0 && <Button variant="secondary" onClick={() => setFilter("cliente_confirmou")}>{data.totals.aguardandoValidacaoCount} para validar</Button>}
@@ -47,6 +51,57 @@ export function DashboardPage() {
       <Button asChild className="floating-add"><Link to="/nova"><Plus aria-hidden="true" />Adicionar cobrança</Link></Button>
     </div>
   );
+}
+
+interface AssistantDraft {
+  client: { id?: string; name: string; whatsapp: string };
+  description: string;
+  amountCents: number;
+  dueDate: string;
+}
+
+type AssistantResponse =
+  | { kind: "draft"; message: string; draft: AssistantDraft }
+  | { kind: "clarification"; message: string };
+
+function AssistantCommand({
+  onDraft,
+}: {
+  onDraft: (draft: AssistantDraft, startedAt: number) => void;
+}) {
+  const [message, setMessage] = useState("");
+  const [reply, setReply] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = message.trim();
+    if (text.length < 3) return;
+    const journeyStartedAt = startedAt ?? Date.now();
+    if (startedAt === null) setStartedAt(journeyStartedAt);
+    setBusy(true); setError(""); setReply("");
+    try {
+      const result = await api<AssistantResponse>("/api/assistant/interpret", {
+        method: "POST",
+        body: JSON.stringify({ message: text }),
+      });
+      if (result.kind === "draft") onDraft(result.draft, journeyStartedAt);
+      else setReply(result.message);
+    } catch (cause) {
+      setError(userMessage(cause, "Não foi possível interpretar o pedido. Tente novamente."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <Card asChild className="assistant-card"><form onSubmit={submit}>
+    <div className="assistant-heading"><Sparkles aria-hidden="true" /><div><strong>Criar falando do seu jeito</strong><small>Assistente experimental</small></div></div>
+    <div className="assistant-input-row"><input aria-label="Pedido de cobrança" value={message} onChange={(event) => setMessage(event.target.value)} maxLength={500} placeholder="Ex.: cobra R$ 80 do João pela lavagem, vence amanhã" /><Button loading={busy} loadingLabel="Lendo…" disabled={message.trim().length < 3}>Preparar</Button></div>
+    {reply && <p className="assistant-reply">{reply}</p>}
+    {error && <ErrorNotice message={error} />}
+  </form></Card>;
 }
 
 function ChargeCard({ item }: { item: ChargeItem }) {
