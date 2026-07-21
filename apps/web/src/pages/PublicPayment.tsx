@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { publicApi } from "../api";
 import { ErrorNotice, Spinner } from "../components";
 import { env } from "../config";
@@ -64,7 +64,7 @@ export function PublicPaymentPage() {
       <Button variant="ghost" className="qr-toggle" onClick={() => { setShowQr((value) => !value); setQrError(false); }}>{showQr ? "Esconder QR Code" : "Ver QR Code"}</Button>
       {showQr && (qrError ? <ErrorNotice message="Não foi possível carregar o QR Code. Você ainda pode copiar o código Pix acima." /> : <img className="qr-code" src={`${env.apiUrl}/public/pay/${token}/qr.svg`} alt="QR Code Pix" onError={() => setQrError(true)} />)}
       {copied && <section className="confirm-panel"><div className="step-mark">2</div><h2>Já fez o Pix?</h2><p>Avise o prestador para ele conferir. O comprovante é opcional.</p><label className="file-label">{file ? file.name : "Anexar comprovante (opcional)"}<Input type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>{error && <ErrorNotice message={error} />}<Button disabled={busy} onClick={confirm}>{busy ? "Enviando…" : "Já paguei"}</Button></section>}
-      <footer>Pagamento direto para {payment.provider.name}. O Prestou não recebe nem movimenta o dinheiro.</footer>
+      <footer>Pagamento direto para {payment.provider.name}. O Prestou não recebe nem movimenta o dinheiro. <Link className="legal-link" to="/privacidade">Privacidade</Link></footer>
     </Card>
   </main>;
 }

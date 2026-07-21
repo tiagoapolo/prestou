@@ -24,6 +24,49 @@ const createChargeSchema = z.object({
   fillMs: z.number().int().nonnegative().optional(),
 });
 
+const paginationSchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+});
+
+const chargeListQuerySchema = paginationSchema.extend({
+  clientId: z.string().uuid().optional(),
+  status: z.enum(["em_aberto", "cliente_confirmou", "paga", "atrasada"]).optional(),
+  from: isoDateSchema.optional(),
+  to: isoDateSchema.optional(),
+}).refine(({ from, to }) => !from || !to || from <= to, {
+  message: "O início do período deve ser anterior ao fim",
+  path: ["from"],
+});
+
+const financialSummaryQuerySchema = paginationSchema.extend({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Mês deve estar no formato AAAA-MM")
+    .default(() => todayISO().slice(0, 7)),
+});
+
+type ChargeListRow = PaymentRow & {
+  description: string;
+  client_id: string;
+  client_name: string;
+  client_whatsapp: string;
+  charge_id: string;
+};
+
+function pagination(page: number, pageSize: number, total: number) {
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+function monthRange(month: string): { from: string; to: string } {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const next = new Date(Date.UTC(year!, monthNumber!, 1));
+  return { from: `${month}-01`, to: next.toISOString().slice(0, 10) };
+}
+
 async function findOrCreateClient(
   provider: ProviderRow,
   input: z.infer<typeof createChargeSchema>["client"],
@@ -179,26 +222,67 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /** F9 — painel "quem me deve". */
-  app.get("/api/charges", async (req) => {
+  app.get("/api/charges", async (req, reply) => {
+    const parsed = chargeListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: validationMessage(parsed.error),
+        issues: parsed.error.issues,
+      });
+    }
+
     const provider = req.provider!;
-    const rows = await queryAll<
-      PaymentRow & {
-        description: string;
-        client_name: string;
-        client_whatsapp: string;
-        charge_id: string;
-      }
-    >(
-      `SELECT p.*, c.description, cl.name AS client_name, cl.whatsapp AS client_whatsapp, c.id AS charge_id
+    const { page, pageSize, clientId, status, from, to } = parsed.data;
+    const today = todayISO();
+    const conditions = ["c.provider_id = ?"];
+    const params: Array<string | number> = [provider.id];
+
+    if (clientId) {
+      conditions.push("c.client_id = ?");
+      params.push(clientId);
+    }
+    if (status === "atrasada") {
+      conditions.push("p.status = 'em_aberto'", "p.due_date < ?");
+      params.push(today);
+    } else if (status === "em_aberto") {
+      conditions.push("p.status = 'em_aberto'", "p.due_date >= ?");
+      params.push(today);
+    } else if (status) {
+      conditions.push("p.status = ?");
+      params.push(status);
+    }
+    if (from) {
+      conditions.push("p.due_date >= ?");
+      params.push(from);
+    }
+    if (to) {
+      conditions.push("p.due_date <= ?");
+      params.push(to);
+    }
+
+    const where = conditions.join(" AND ");
+    const totalRow = await queryOne<{ total: number | string }>(
+      `SELECT COUNT(*) AS total
+         FROM payments p
+         JOIN charges c ON c.id = p.charge_id
+        WHERE ${where}`,
+      ...params,
+    );
+    const total = Number(totalRow?.total ?? 0);
+    const rows = await queryAll<ChargeListRow>(
+      `SELECT p.*, c.description, c.client_id, cl.name AS client_name,
+              cl.whatsapp AS client_whatsapp, c.id AS charge_id
          FROM payments p
          JOIN charges c ON c.id = p.charge_id
          JOIN clients cl ON cl.id = c.client_id
-        WHERE c.provider_id = ?
-        ORDER BY p.created_at DESC`,
-      provider.id,
+        WHERE ${where}
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT ? OFFSET ?`,
+      ...params,
+      pageSize,
+      (page - 1) * pageSize,
     );
 
-    const today = todayISO();
     const items = rows.map((r) => {
       const status = derivedStatus(r, today);
       const message = chargeMessage({
@@ -216,7 +300,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
         amountLabel: formatBRL(r.amount_cents),
         dueDate: r.due_date,
         status,
-        client: { name: r.client_name, whatsapp: r.client_whatsapp },
+        client: { id: r.client_id, name: r.client_name, whatsapp: r.client_whatsapp },
         paymentUrl: paymentUrl(r.public_token),
         hasComprovante: Boolean(r.comprovante_path),
         clientConfirmedAt: r.client_confirmed_at,
@@ -226,21 +310,115 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
       };
     });
 
-    const monthPrefix = today.slice(0, 7);
-    const inMonth = items.filter((i) => i.dueDate.startsWith(monthPrefix));
-    const sum = (list: typeof items) =>
-      list.reduce((acc, i) => acc + i.amountCents, 0);
+    const currentMonth = monthRange(today.slice(0, 7));
+    const totals = await queryOne<{
+      a_receber_cents: number | string;
+      recebido_mes_cents: number | string;
+      atrasadas_count: number | string;
+      aguardando_validacao_count: number | string;
+    }>(
+      `SELECT
+         COALESCE(SUM(CASE WHEN p.status <> 'paga' THEN p.amount_cents ELSE 0 END), 0) AS a_receber_cents,
+         COALESCE(SUM(CASE WHEN p.status = 'paga' AND p.due_date >= ? AND p.due_date < ? THEN p.amount_cents ELSE 0 END), 0) AS recebido_mes_cents,
+         COUNT(*) FILTER (WHERE p.status = 'em_aberto' AND p.due_date < ?) AS atrasadas_count,
+         COUNT(*) FILTER (WHERE p.status = 'cliente_confirmou') AS aguardando_validacao_count
+       FROM payments p
+       JOIN charges c ON c.id = p.charge_id
+      WHERE c.provider_id = ?`,
+      currentMonth.from,
+      currentMonth.to,
+      today,
+      provider.id,
+    );
 
     return {
-      items: items.slice(0, 10),
+      items,
+      pagination: pagination(page, pageSize, total),
       totals: {
-        aReceberCents: sum(items.filter((i) => i.status !== "paga")),
-        recebidoMesCents: sum(inMonth.filter((i) => i.status === "paga")),
-        atrasadasCount: items.filter((i) => i.status === "atrasada").length,
-        aguardandoValidacaoCount: items.filter(
-          (i) => i.status === "cliente_confirmou",
-        ).length,
+        aReceberCents: Number(totals?.a_receber_cents ?? 0),
+        recebidoMesCents: Number(totals?.recebido_mes_cents ?? 0),
+        atrasadasCount: Number(totals?.atrasadas_count ?? 0),
+        aguardandoValidacaoCount: Number(totals?.aguardando_validacao_count ?? 0),
       },
+    };
+  });
+
+  /** Resumo financeiro das cobranças com vencimento em um mês. */
+  app.get("/api/financial-summary", async (req, reply) => {
+    const parsed = financialSummaryQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: validationMessage(parsed.error),
+        issues: parsed.error.issues,
+      });
+    }
+
+    const { month, page, pageSize } = parsed.data;
+    const range = monthRange(month);
+    const provider = req.provider!;
+    const params = [provider.id, range.from, range.to];
+    const totalRow = await queryOne<{ total: number | string }>(
+      `SELECT COUNT(*) AS total
+         FROM payments p
+         JOIN charges c ON c.id = p.charge_id
+        WHERE c.provider_id = ? AND p.due_date >= ? AND p.due_date < ?`,
+      ...params,
+    );
+    const total = Number(totalRow?.total ?? 0);
+    const rows = await queryAll<ChargeListRow>(
+      `SELECT p.*, c.description, c.client_id, cl.name AS client_name,
+              cl.whatsapp AS client_whatsapp, c.id AS charge_id
+         FROM payments p
+         JOIN charges c ON c.id = p.charge_id
+         JOIN clients cl ON cl.id = c.client_id
+        WHERE c.provider_id = ? AND p.due_date >= ? AND p.due_date < ?
+        ORDER BY p.due_date DESC, p.created_at DESC, p.id DESC
+        LIMIT ? OFFSET ?`,
+      ...params,
+      pageSize,
+      (page - 1) * pageSize,
+    );
+    const totals = await queryOne<{
+      total_cents: number | string;
+      received_cents: number | string;
+      pending_cents: number | string;
+      overdue_cents: number | string;
+    }>(
+      `SELECT
+         COALESCE(SUM(p.amount_cents), 0) AS total_cents,
+         COALESCE(SUM(CASE WHEN p.status = 'paga' THEN p.amount_cents ELSE 0 END), 0) AS received_cents,
+         COALESCE(SUM(CASE WHEN p.status <> 'paga' THEN p.amount_cents ELSE 0 END), 0) AS pending_cents,
+         COALESCE(SUM(CASE WHEN p.status = 'em_aberto' AND p.due_date < ? THEN p.amount_cents ELSE 0 END), 0) AS overdue_cents
+       FROM payments p
+       JOIN charges c ON c.id = p.charge_id
+      WHERE c.provider_id = ? AND p.due_date >= ? AND p.due_date < ?`,
+      todayISO(),
+      ...params,
+    );
+
+    return {
+      month,
+      items: rows.map((row) => ({
+        paymentId: row.id,
+        chargeId: row.charge_id,
+        description: row.description,
+        amountCents: row.amount_cents,
+        dueDate: row.due_date,
+        status: derivedStatus(row),
+        client: {
+          id: row.client_id,
+          name: row.client_name,
+          whatsapp: row.client_whatsapp,
+        },
+        paidAt: row.paid_at,
+      })),
+      summary: {
+        totalCents: Number(totals?.total_cents ?? 0),
+        receivedCents: Number(totals?.received_cents ?? 0),
+        pendingCents: Number(totals?.pending_cents ?? 0),
+        overdueCents: Number(totals?.overdue_cents ?? 0),
+      },
+      pagination: pagination(page, pageSize, total),
     };
   });
 

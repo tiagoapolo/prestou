@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, authenticatedFileUrl } from "../api";
 import { ErrorNotice, Spinner } from "../components";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,9 +47,9 @@ export function ChargeDetailPage() {
     if (receiptWindow) receiptWindow.opener = null;
     setBusy(true); setMessage("");
     try {
-      const result = await api<{ url: string }>(detail.comprovanteUrl);
-      if (receiptWindow) receiptWindow.location.replace(result.url);
-      else window.location.assign(result.url);
+      const url = await authenticatedFileUrl(detail.comprovanteUrl);
+      if (receiptWindow) receiptWindow.location.replace(url);
+      else window.location.assign(url);
     } catch (e) {
       receiptWindow?.close();
       setMessage(userMessage(e, "Não foi possível carregar o comprovante. Tente novamente."));

@@ -75,6 +75,29 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return request<T>(path, init, true);
 }
 
+export async function authenticatedFileUrl(path: string): Promise<string> {
+  const token = await accessToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  let response: Response;
+  try {
+    response = await fetch(`${env.apiUrl}${path}`, { headers });
+  } catch (error) {
+    console.error("API connection failed", error);
+    throw new ApiError(NETWORK_ERROR, 0, "NETWORK_ERROR");
+  }
+
+  if (response.redirected) return response.url;
+
+  const payload = await response.json().catch(() => ({})) as ErrorPayload & { url?: unknown };
+  if (!response.ok) throw responseError(response, payload);
+  if (typeof payload.url !== "string" || !/^https?:\/\//.test(payload.url)) {
+    throw new ApiError(GENERIC_ERROR, 500, "INVALID_FILE_URL");
+  }
+  return payload.url;
+}
+
 export async function publicApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   return request<T>(path, init, false);
 }
