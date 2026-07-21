@@ -32,9 +32,16 @@ const authClient = createClient(integrationEnv.supabaseUrl!, integrationEnv.anon
 
 let app: Awaited<ReturnType<typeof buildServer>>;
 let token: string;
+let primaryIdentity: AuthIdentity;
 const authUserIds: string[] = [];
 
-async function createAuthUser(label: string): Promise<string> {
+interface AuthIdentity {
+  token: string;
+  email: string;
+  password: string;
+}
+
+async function createAuthIdentity(label: string): Promise<AuthIdentity> {
   const email = `prestou-test-${label}-${crypto.randomUUID()}@example.com`;
   const password = `T3st-${crypto.randomUUID()}!`;
   const created = await admin.auth.admin.createUser({
@@ -46,12 +53,17 @@ async function createAuthUser(label: string): Promise<string> {
   authUserIds.push(created.data.user!.id);
   const signedIn = await authClient.auth.signInWithPassword({ email, password });
   assert.ifError(signedIn.error);
-  return signedIn.data.session!.access_token;
+  return { token: signedIn.data.session!.access_token, email, password };
+}
+
+async function createAuthUser(label: string): Promise<string> {
+  return (await createAuthIdentity(label)).token;
 }
 
 before(async () => {
   app = await buildServer();
-  token = await createAuthUser("primary");
+  primaryIdentity = await createAuthIdentity("primary");
+  token = primaryIdentity.token;
   const res = await app.inject({
     method: "POST",
     url: "/api/providers",
@@ -255,22 +267,256 @@ test("caso 2 do QA — contestação reabre a cobrança e devolve mensagem educa
   assert.equal(again.json().status, "cliente_confirmou");
 });
 
-test("caso 4 do QA — prestador marca pago manualmente (pagamento por fora)", async () => {
+test("marcação manual direta é bloqueada sem proposta confirmada", async () => {
   const charge = await createCharge();
   const res = await app.inject({
     method: "POST",
     url: `/api/payments/${charge.payment.id}/mark-paid`,
     headers: auth(),
   });
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.json().payment.status, "paga");
+  assert.equal(res.statusCode, 428);
+  assert.equal(res.json().code, "ACTION_PROPOSAL_REQUIRED");
+});
+
+test("caso 4 do QA — proposta persiste parâmetros exatos e é executada uma vez", async () => {
+  const charge = await createCharge();
+  const idempotencyKey = crypto.randomUUID();
+  const payload = {
+    tool: "marcar_pago_manual",
+    arguments: { paymentId: charge.payment.id },
+    idempotencyKey,
+  };
+
+  const proposed = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload,
+  });
+  assert.equal(proposed.statusCode, 201);
+  const proposal = proposed.json().proposal;
+  assert.deepEqual(proposal.arguments, payload.arguments);
+  assert.equal(proposal.idempotencyKey, idempotencyKey);
+  assert.match(proposal.summary, /R\$\s?150,07/);
+  assert.match(proposal.summary, /Maria Cliente/);
+  assert.match(proposal.summary, /não pode ser desfeita/i);
+  assert.ok(new Date(proposal.expiresAt).getTime() > Date.now());
+
+  const { queryOne } = await import("../src/db.ts");
+  const storedProposal = await queryOne<{ arguments_type: string }>(
+    "SELECT jsonb_typeof(arguments) AS arguments_type FROM assistant_action_proposals WHERE id = ?",
+    proposal.proposalId,
+  );
+  assert.equal(storedProposal?.arguments_type, "object");
+
+  const duplicate = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload,
+  });
+  assert.equal(duplicate.statusCode, 200);
+  assert.equal(duplicate.json().proposal.proposalId, proposal.proposalId);
+  assert.equal(duplicate.json().alreadyProposed, true);
+
+  const otherCharge = await createCharge(9900);
+  const conflicting = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload: {
+      ...payload,
+      arguments: { paymentId: otherCharge.payment.id },
+    },
+  });
+  assert.equal(conflicting.statusCode, 409);
+
+  const confirmations = await Promise.all([
+    app.inject({
+      method: "POST",
+      url: `/api/action-proposals/${proposal.proposalId}/confirm`,
+      headers: auth(),
+    }),
+    app.inject({
+      method: "POST",
+      url: `/api/action-proposals/${proposal.proposalId}/confirm`,
+      headers: auth(),
+    }),
+  ]);
+  assert.ok(confirmations.every((response) => response.statusCode === 200));
+  assert.deepEqual(
+    confirmations.map((response) => response.json().alreadyConfirmed).sort(),
+    [false, true],
+  );
+  assert.ok(confirmations.every((response) => response.json().payment.status === "paga"));
+
+  const storedConfirmation = await queryOne<{ result_type: string }>(
+    "SELECT jsonb_typeof(result) AS result_type FROM assistant_action_proposals WHERE id = ?",
+    proposal.proposalId,
+  );
+  assert.equal(storedConfirmation?.result_type, "object");
+
+  const repeatedAfterExecution = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload,
+  });
+  assert.equal(repeatedAfterExecution.statusCode, 200);
+  assert.equal(repeatedAfterExecution.json().proposal.proposalId, proposal.proposalId);
+});
+
+test("proposta criada com argumentos duplamente serializados continua confirmável", async () => {
+  const charge = await createCharge();
+  const proposed = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload: {
+      tool: "marcar_pago_manual",
+      arguments: { paymentId: charge.payment.id },
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  assert.equal(proposed.statusCode, 201);
+
+  const { execute } = await import("../src/db.ts");
+  await execute(
+    "UPDATE assistant_action_proposals SET arguments = to_jsonb(?::text) WHERE id = ?",
+    JSON.stringify({ paymentId: charge.payment.id }),
+    proposed.json().proposal.proposalId,
+  );
+
+  const confirmed = await app.inject({
+    method: "POST",
+    url: `/api/action-proposals/${proposed.json().proposal.proposalId}/confirm`,
+    headers: auth(),
+  });
+  assert.equal(confirmed.statusCode, 200);
+  assert.equal(confirmed.json().payment.status, "paga");
+});
+
+test("proposta só pode ser confirmada pela sessão que a criou", async () => {
+  const charge = await createCharge();
+  const proposed = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload: {
+      tool: "marcar_pago_manual",
+      arguments: { paymentId: charge.payment.id },
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  assert.equal(proposed.statusCode, 201);
+
+  const secondSession = await authClient.auth.signInWithPassword({
+    email: primaryIdentity.email,
+    password: primaryIdentity.password,
+  });
+  assert.ifError(secondSession.error);
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/action-proposals/${proposed.json().proposal.proposalId}/confirm`,
+    headers: { authorization: `Bearer ${secondSession.data.session!.access_token}` },
+  });
+  assert.equal(res.statusCode, 404);
+
+  const ownerConfirmation = await app.inject({
+    method: "POST",
+    url: `/api/action-proposals/${proposed.json().proposal.proposalId}/confirm`,
+    headers: auth(),
+  });
+  assert.equal(ownerConfirmation.statusCode, 200);
+});
+
+test("proposta expirada não altera a cobrança", async () => {
+  const charge = await createCharge();
+  const proposed = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload: {
+      tool: "marcar_pago_manual",
+      arguments: { paymentId: charge.payment.id },
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  assert.equal(proposed.statusCode, 201);
+
+  const { execute } = await import("../src/db.ts");
+  await execute(
+    "UPDATE assistant_action_proposals SET expires_at = ? WHERE id = ?",
+    "2020-01-01T00:00:00.000Z",
+    proposed.json().proposal.proposalId,
+  );
+
+  const expired = await app.inject({
+    method: "POST",
+    url: `/api/action-proposals/${proposed.json().proposal.proposalId}/confirm`,
+    headers: auth(),
+  });
+  assert.equal(expired.statusCode, 410);
+
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/charges/${charge.charge.id}`,
+    headers: auth(),
+  });
+  assert.notEqual(detail.json().status, "paga");
+});
+
+test("mudança de estado invalida a proposta antes da execução", async () => {
+  const charge = await createCharge();
+  const proposed = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload: {
+      tool: "marcar_pago_manual",
+      arguments: { paymentId: charge.payment.id },
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  assert.equal(proposed.statusCode, 201);
+
+  const clientConfirmation = await app.inject({
+    method: "POST",
+    url: `/public/pay/${charge.payment.publicToken}/confirm`,
+    payload: {},
+  });
+  assert.equal(clientConfirmation.statusCode, 200);
+
+  const stale = await app.inject({
+    method: "POST",
+    url: `/api/action-proposals/${proposed.json().proposal.proposalId}/confirm`,
+    headers: auth(),
+  });
+  assert.equal(stale.statusCode, 409);
+
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/charges/${charge.charge.id}`,
+    headers: auth(),
+  });
+  assert.equal(detail.json().status, "cliente_confirmou");
 });
 
 test("máquina de estados — transição inválida a partir de paga retorna 409", async () => {
   const charge = await createCharge();
+  const proposed = await app.inject({
+    method: "POST",
+    url: "/api/action-proposals",
+    headers: auth(),
+    payload: {
+      tool: "marcar_pago_manual",
+      arguments: { paymentId: charge.payment.id },
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
   await app.inject({
     method: "POST",
-    url: `/api/payments/${charge.payment.id}/mark-paid`,
+    url: `/api/action-proposals/${proposed.json().proposal.proposalId}/confirm`,
     headers: auth(),
   });
   // paga é terminal: contestar deve falhar.

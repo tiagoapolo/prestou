@@ -79,7 +79,7 @@ export function OnboardingPage() {
           <Label>Cidade/município <span className="optional">opcional</span><CityAutocomplete /></Label>
           <Label className="check-row"><Checkbox name="consent" required checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} /> <span>Li a <Link className="legal-link" to="/privacidade" target="_blank">Política de Privacidade</Link> e concordo com o uso destes dados para criar e acompanhar minhas cobranças.</span></Label>
           {error && <ErrorNotice message={error} />}
-          <Button disabled={busy}>{busy ? "Salvando…" : "Começar a cobrar"}</Button>
+          <Button loading={busy} loadingLabel="Salvando…">Começar a cobrar</Button>
         </form>
       </section>
     </main>
