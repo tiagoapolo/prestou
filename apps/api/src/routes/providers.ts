@@ -94,9 +94,9 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
     let keyInfo;
     try {
       keyInfo = parsePixKey(body.pixKey);
-    } catch (err) {
+    } catch {
       return reply.code(400).send({
-        error: err instanceof Error ? err.message : "Chave Pix inválida",
+        error: "Chave Pix inválida. Confira o formato e tente novamente.",
       });
     }
 

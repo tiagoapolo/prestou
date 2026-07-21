@@ -9,6 +9,7 @@ import { publicRoutes } from "./routes/public.js";
 import { insightRoutes } from "./routes/insights.js";
 import { runReminders } from "./reminders.js";
 import { closeDatabase } from "./db.js";
+import { publicErrorMessage } from "./public-errors.js";
 
 export async function buildServer() {
   const app = Fastify({
@@ -37,6 +38,25 @@ export async function buildServer() {
   await app.register(paymentRoutes);
   await app.register(publicRoutes);
   await app.register(insightRoutes);
+
+  app.setNotFoundHandler((_req, reply) => {
+    return reply.code(404).send({ error: "Endereço não encontrado" });
+  });
+
+  app.setErrorHandler((error, req, reply) => {
+    const reportedStatus = typeof error === "object" && error && "statusCode" in error && typeof error.statusCode === "number"
+      ? error.statusCode
+      : 500;
+    const statusCode = reportedStatus >= 400 && reportedStatus < 500 ? reportedStatus : 500;
+    const logContext = { err: error, method: req.method, url: req.url };
+    if (statusCode >= 500) req.log.error(logContext, "request failed");
+    else req.log.warn(logContext, "request rejected");
+
+    return reply.code(statusCode).send({
+      error: publicErrorMessage(statusCode),
+      ...(statusCode >= 500 ? { code: "INTERNAL_ERROR" } : {}),
+    });
+  });
 
   app.addHook("onClose", async () => {
     await closeDatabase();

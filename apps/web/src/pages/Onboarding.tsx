@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMobile, isValidMobile, normalizeMobile } from "../formats";
 import { CityAutocomplete } from "../components/CityAutocomplete";
+import { userMessage } from "../errors";
 
 export function OnboardingPage() {
   const { refreshProvider } = useAuth();
@@ -59,7 +60,7 @@ export function OnboardingPage() {
       });
       await refreshProvider();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível concluir o cadastro");
+      setError(userMessage(err, "Não foi possível concluir o cadastro. Tente novamente."));
     } finally { setBusy(false); }
   }
 

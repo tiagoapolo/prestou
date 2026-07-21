@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Plus } from "lucide-react";
+import { userMessage } from "../errors";
 
 const labels: Record<PaymentStatus, string> = {
   em_aberto: "Em aberto", atrasada: "Atrasada", cliente_confirmou: "Validar", paga: "Paga",
@@ -19,7 +20,7 @@ export function DashboardPage() {
   const [filter, setFilter] = useState<"todas" | PaymentStatus>("todas");
   const [error, setError] = useState("");
 
-  useEffect(() => { api<DashboardData>("/api/charges").then(setData).catch((e) => setError(e.message)); }, []);
+  useEffect(() => { api<DashboardData>("/api/charges").then(setData).catch((cause) => setError(userMessage(cause, "Não foi possível carregar as cobranças. Tente novamente."))); }, []);
   const items = useMemo(() => data?.items.filter((item) => filter === "todas" || item.status === filter) ?? [], [data, filter]);
   if (error) return <ErrorNotice message={error} />;
   if (!data) return <Spinner />;
