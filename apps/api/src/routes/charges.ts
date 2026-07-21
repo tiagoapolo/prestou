@@ -22,6 +22,7 @@ const createChargeSchema = z.object({
   dueDate: isoDateSchema,
   /** Duração do preenchimento no cliente, para medir a meta de 60s (F2). */
   fillMs: z.number().int().nonnegative().optional(),
+  source: z.enum(["form", "assistant"]).default("form"),
 });
 
 const paginationSchema = z.object({
@@ -191,7 +192,11 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
       providerId: provider.id,
       chargeId,
       paymentId,
-      metadata: { fillMs: body.fillMs ?? null, amountCents: body.amountCents },
+      metadata: {
+        fillMs: body.fillMs ?? null,
+        amountCents: body.amountCents,
+        source: body.source,
+      },
     });
 
     const message = chargeMessage({
