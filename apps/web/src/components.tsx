@@ -36,12 +36,15 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
 export function AppShell() {
   const { signOut } = useAuth();
   const [error, setError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
   async function handleSignOut() {
-    setError("");
+    setSigningOut(true); setError("");
     try {
       await signOut();
     } catch (cause) {
       setError(userMessage(cause, "Não foi possível sair da conta. Tente novamente."));
+    } finally {
+      setSigningOut(false);
     }
   }
   return (
@@ -50,7 +53,7 @@ export function AppShell() {
         <Link to="/" className="brand">prestou<span>.</span></Link>
         <div className="topbar-actions">
           <Button asChild variant="ghost" size="sm"><Link to="/configuracoes"><Settings aria-hidden="true" />Configurações</Link></Button>
-          <Button variant="ghost" size="sm" onClick={handleSignOut} aria-label="Sair">Sair</Button>
+          <Button variant="ghost" size="sm" loading={signingOut} loadingLabel="Saindo…" onClick={handleSignOut} aria-label="Sair">Sair</Button>
         </div>
       </header>
       {error && <div className="shell-error"><ErrorNotice message={error} /></div>}

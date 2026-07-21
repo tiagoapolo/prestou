@@ -65,38 +65,14 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  /**
-   * F6 — prestador marca pago manualmente, sem confirmação do cliente
-   * (em_aberto → paga). Pagamento "por fora" acontece e é dado de funil.
-   */
+  /** A rota direta é mantida apenas para orientar clientes antigos ao protocolo seguro. */
   app.post<{ Params: { id: string } }>(
     "/api/payments/:id/mark-paid",
-    async (req, reply) => {
-      const ctx = await loadOwned(req.params.id, req.provider!);
-      if (!ctx) return reply.code(404).send({ error: "Parcela não encontrada" });
-
-      try {
-        const updated = await transition({
-          payment: ctx.payment,
-          to: "paga",
-          actor: "provider",
-          action: "marcado_pago_manual",
-          patch: { paid_via: "manual" },
-        });
-        await track({
-          type: "marcado_pago_manual",
-          providerId: req.provider!.id,
-          chargeId: ctx.charge.id,
-          paymentId: updated.id,
-        });
-        return { payment: { id: updated.id, status: updated.status, paidAt: updated.paid_at } };
-      } catch (err) {
-        if (err instanceof TransitionError) {
-          req.log.warn({ err }, "Payment transition rejected");
-          return reply.code(409).send({ error: "Esta cobrança foi atualizada. Recarregue a página e tente novamente." });
-        }
-        throw err;
-      }
+    async (_req, reply) => {
+      return reply.code(428).send({
+        error: "Marcar uma cobrança como paga é definitivo e exige confirmação da proposta exibida.",
+        code: "ACTION_PROPOSAL_REQUIRED",
+      });
     },
   );
 

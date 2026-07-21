@@ -1,4 +1,4 @@
-import { queryOne, withTransaction } from "./db.js";
+import { queryOne, withTransaction, type DatabaseClient } from "./db.js";
 import { newId } from "./ids.js";
 import type { DerivedStatus, PaymentRow, PaymentStatus } from "./types.js";
 
@@ -36,7 +36,10 @@ const ALLOWED: Record<PaymentStatus, PaymentStatus[]> = {
  * inválida a partir do estado atual — a proteção nº 1 contra o pior bug do
  * produto (cobrança paga sem dinheiro, ou o contrário).
  */
-export async function transition(input: TransitionInput): Promise<PaymentRow> {
+export async function transition(
+  input: TransitionInput,
+  transaction?: DatabaseClient,
+): Promise<PaymentRow> {
   const { payment, to, actor, action, patch } = input;
   const from = payment.status;
 
@@ -60,7 +63,7 @@ export async function transition(input: TransitionInput): Promise<PaymentRow> {
     paid_via: patch?.paid_via ?? payment.paid_via,
   };
 
-  return withTransaction(async (tx) => {
+  const apply = async (tx: DatabaseClient) => {
     const res = await tx.execute(`
     UPDATE payments
        SET status = ?,
@@ -79,23 +82,25 @@ export async function transition(input: TransitionInput): Promise<PaymentRow> {
       from,
     );
 
-  if (res.changes !== 1) {
-    // Corrida: o estado mudou entre a leitura e o update.
-    throw new TransitionError(
-      `Estado da parcela ${payment.id} mudou concorrentemente; tente de novo`,
-    );
-  }
+    if (res.changes !== 1) {
+      // Corrida: o estado mudou entre a leitura e o update.
+      throw new TransitionError(
+        `Estado da parcela ${payment.id} mudou concorrentemente; tente de novo`,
+      );
+    }
 
-  await tx.execute(`
-    INSERT INTO payment_transitions (id, payment_id, from_status, to_status, actor, action, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, newId(), payment.id, from, to, actor, action, now);
+    await tx.execute(`
+      INSERT INTO payment_transitions (id, payment_id, from_status, to_status, actor, action, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, newId(), payment.id, from, to, actor, action, now);
 
     return (await tx.queryOne<PaymentRow>(
       "SELECT * FROM payments WHERE id = ?",
       payment.id,
     ))!;
-  });
+  };
+
+  return transaction ? apply(transaction) : withTransaction(apply);
 }
 
 export async function getPayment(id: string): Promise<PaymentRow | undefined> {

@@ -17,13 +17,14 @@ export function PublicPaymentPage() {
   const [showQr, setShowQr] = useState(false);
   const [qrError, setQrError] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [copying, setCopying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { publicApi<PublicPayment>(`/public/pay/${token}`).then(setPayment).catch((cause) => setError(userMessage(cause, "Não foi possível carregar esta cobrança. Tente novamente."))); }, [token]);
 
   async function copyCode() {
     if (!payment) return;
-    setError("");
+    setCopying(true); setError("");
     try {
       try {
         await navigator.clipboard.writeText(payment.brCode);
@@ -37,6 +38,8 @@ export function PublicPaymentPage() {
       publicApi(`/public/pay/${token}/copied`, { method: "POST" }).catch(() => undefined);
     } catch {
       setError("Não foi possível copiar o código Pix. Tente novamente ou selecione o código manualmente.");
+    } finally {
+      setCopying(false);
     }
   }
 
@@ -59,11 +62,11 @@ export function PublicPaymentPage() {
     <Card className="receipt-card">
       <header className="provider-head">{payment.provider.photoUrl ? <img src={payment.provider.photoUrl} alt="" /> : <div className="avatar">{payment.provider.name[0]}</div>}<div><small>Cobrança de</small><strong>{payment.provider.name}</strong><span>{payment.provider.profession}</span></div></header>
       <div className="receipt-body"><span>Serviço</span><strong>{payment.description}</strong><span>Valor do Pix</span><div className="public-amount">{payment.amountLabel}</div></div>
-      <Button className="copy-button" onClick={copyCode}>{copied ? "Código copiado ✓" : "Copiar código Pix"}</Button>
+      <Button className="copy-button" loading={copying} loadingLabel="Copiando…" onClick={copyCode}>{copied ? "Código copiado ✓" : "Copiar código Pix"}</Button>
       {error && !copied && <ErrorNotice message={error} />}
       <Button variant="ghost" className="qr-toggle" onClick={() => { setShowQr((value) => !value); setQrError(false); }}>{showQr ? "Esconder QR Code" : "Ver QR Code"}</Button>
       {showQr && (qrError ? <ErrorNotice message="Não foi possível carregar o QR Code. Você ainda pode copiar o código Pix acima." /> : <img className="qr-code" src={`${env.apiUrl}/public/pay/${token}/qr.svg`} alt="QR Code Pix" onError={() => setQrError(true)} />)}
-      {copied && <section className="confirm-panel"><div className="step-mark">2</div><h2>Já fez o Pix?</h2><p>Avise o prestador para ele conferir. O comprovante é opcional.</p><label className="file-label">{file ? file.name : "Anexar comprovante (opcional)"}<Input type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>{error && <ErrorNotice message={error} />}<Button disabled={busy} onClick={confirm}>{busy ? "Enviando…" : "Já paguei"}</Button></section>}
+      {copied && <section className="confirm-panel"><div className="step-mark">2</div><h2>Já fez o Pix?</h2><p>Avise o prestador para ele conferir. O comprovante é opcional.</p><label className="file-label">{file ? file.name : "Anexar comprovante (opcional)"}<Input type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>{error && <ErrorNotice message={error} />}<Button loading={busy} loadingLabel="Enviando…" onClick={confirm}>Já paguei</Button></section>}
       <footer>Pagamento direto para {payment.provider.name}. O Prestou não recebe nem movimenta o dinheiro. <Link className="legal-link" to="/privacidade">Privacidade</Link></footer>
     </Card>
   </main>;

@@ -20,6 +20,7 @@ export function NewChargePage() {
   const [selected, setSelected] = useState("");
   const [created, setCreated] = useState<Created | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
   const [error, setError] = useState("");
   const [clientWhatsapp, setClientWhatsapp] = useState("");
   const [amount, setAmount] = useState("");
@@ -63,16 +64,18 @@ export function NewChargePage() {
 
   async function openWhatsApp() {
     if (!created) return;
-    setError("");
+    setOpeningWhatsApp(true); setError("");
     try {
       await api(`/api/payments/${created.payment.id}/sent`, { method: "POST" });
       window.location.href = created.whatsapp.deeplink;
     } catch (cause) {
       setError(userMessage(cause, "Não foi possível abrir o WhatsApp. Tente novamente."));
+    } finally {
+      setOpeningWhatsApp(false);
     }
   }
 
-  if (created) return <div className="page success-page"><div className="success-icon">✓</div><p className="eyebrow">Cobrança criada</p><h1>Pronta para enviar</h1><p>A mensagem já está escrita com o valor e o link certo.</p>{error && <ErrorNotice message={error} />}<Button className="whatsapp-button" onClick={openWhatsApp}>Abrir WhatsApp</Button><Button variant="secondary" asChild><Link to="/">Voltar ao painel</Link></Button></div>;
+  if (created) return <div className="page success-page"><div className="success-icon">✓</div><p className="eyebrow">Cobrança criada</p><h1>Pronta para enviar</h1><p>A mensagem já está escrita com o valor e o link certo.</p>{error && <ErrorNotice message={error} />}<Button className="whatsapp-button" loading={openingWhatsApp} loadingLabel="Abrindo…" onClick={openWhatsApp}>Abrir WhatsApp</Button><Button variant="secondary" asChild><Link to="/">Voltar ao painel</Link></Button></div>;
 
   return <div className="page"><div className="back-title"><Link to="/">←</Link><div><p className="eyebrow">Meta: menos de 60 segundos</p><h1>Nova cobrança</h1></div></div>
     <Card asChild className="form-card"><form className="stack" onSubmit={submit}>
@@ -81,7 +84,7 @@ export function NewChargePage() {
       <Label>Serviço<Input name="description" required minLength={2} maxLength={120} placeholder="Ex.: corte de grama" /></Label>
       <div className="two-fields"><Label>Valor (R$)<Input name="amount" required inputMode="numeric" placeholder="150,00" value={amount} onChange={(event) => setAmount(formatMoney(event.target.value))} maxLength={9} /></Label><Label>Vencimento<Input name="dueDate" required inputMode="numeric" placeholder="DD/MM/AAAA" value={dueDate} onChange={(event) => setDueDate(formatDate(event.target.value))} maxLength={10} pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" title="Informe uma data válida no formato DD/MM/AAAA" /></Label></div>
       {error && <ErrorNotice message={error} />}
-      <Button disabled={busy}>{busy ? "Criando…" : "Criar e preparar mensagem"}</Button>
+      <Button loading={busy} loadingLabel="Criando…">Criar e preparar mensagem</Button>
     </form></Card>
   </div>;
 }

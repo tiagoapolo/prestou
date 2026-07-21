@@ -1,4 +1,4 @@
-import { db, queryAll, queryOne } from "./db.js";
+import { db, queryAll, queryOne, type DatabaseClient } from "./db.js";
 import { newId } from "./ids.js";
 
 /** Eventos do funil (seção 9 do plano). Sem isso o piloto não gera aprendizado. */
@@ -22,8 +22,8 @@ export interface TrackInput {
   metadata?: Record<string, unknown>;
 }
 
-export async function track(input: TrackInput): Promise<void> {
-  await db.execute(`
+export async function track(input: TrackInput, client: DatabaseClient = db): Promise<void> {
+  await client.execute(`
     INSERT INTO events (id, type, provider_id, charge_id, payment_id, metadata, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `,

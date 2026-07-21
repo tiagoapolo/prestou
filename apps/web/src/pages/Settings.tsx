@@ -79,7 +79,7 @@ export function SettingsPage() {
             <Label>Telefone de contato da empresa<Input name="whatsapp" required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={whatsapp} onChange={(event) => setWhatsapp(formatMobile(event.target.value))} maxLength={15} pattern="\([1-9][0-9]\) 9[0-9]{4}-[0-9]{4}" title="Informe um celular válido com DDD" /></Label>
             {error && <ErrorNotice message={error} />}
             {saved && <div className="notice success" role="status">Configurações salvas com sucesso.</div>}
-            <Button disabled={busy}>{busy ? "Salvando…" : "Salvar alterações"}</Button>
+            <Button loading={busy} loadingLabel="Salvando…">Salvar alterações</Button>
           </form>
         </Card>
       )}

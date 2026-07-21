@@ -51,7 +51,7 @@ export function LoginPage() {
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@exemplo.com" />
             </Label>
             {(error || authError) && <ErrorNotice message={error || authError} />}
-            <Button disabled={busy}>{busy ? "Enviando…" : "Receber link para entrar"}</Button>
+            <Button loading={busy} loadingLabel="Enviando…">Receber link para entrar</Button>
             <small>Sem senha. O link expira e só funciona para você.</small>
           </form>
         )}

@@ -7,7 +7,7 @@ import type { ProviderRow } from "./types.js";
 declare module "fastify" {
   interface FastifyRequest {
     provider?: ProviderRow;
-    authUser?: { id: string; email: string };
+    authUser?: { id: string; email: string; sessionId: string };
   }
 }
 
@@ -31,18 +31,26 @@ export async function requireAuthUser(
     return;
   }
 
-  const { data, error } = await authClient.auth.getUser(token);
-  if (error || !data.user) {
+  const [userResult, claimsResult] = await Promise.all([
+    authClient.auth.getUser(token),
+    authClient.auth.getClaims(token),
+  ]);
+  if (userResult.error || !userResult.data.user || claimsResult.error || !claimsResult.data) {
+    const error = userResult.error ?? claimsResult.error;
     if (error) req.log.warn({ err: error }, "Supabase session validation failed");
     await reply.code(401).send({ error: "Sua sessão expirou. Entre novamente para continuar." });
     return;
   }
-  if (!data.user.email) {
-    req.log.warn({ authUserId: data.user.id }, "Authenticated user has no email");
+  if (!userResult.data.user.email) {
+    req.log.warn({ authUserId: userResult.data.user.id }, "Authenticated user has no email");
     await reply.code(403).send({ error: "Não foi possível validar sua conta. Entre novamente." });
     return;
   }
-  req.authUser = { id: data.user.id, email: data.user.email };
+  req.authUser = {
+    id: userResult.data.user.id,
+    email: userResult.data.user.email,
+    sessionId: claimsResult.data.claims.session_id,
+  };
 }
 
 /** Autoriza o prestador derivando o perfil do `sub` validado pelo Supabase. */

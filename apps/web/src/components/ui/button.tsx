@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
+import { LoaderCircle } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
@@ -15,8 +16,29 @@ const buttonVariants = cva(
   }, size: { default: "h-12 px-5 py-2", sm: "h-9 rounded-lg px-3", lg: "h-14 px-7", icon: "size-11 rounded-full" } }, defaultVariants: { variant: "default", size: "default" } },
 );
 
-function Button({ className, variant, size, asChild = false, ...props }: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : "button";
-  return <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+interface ButtonProps extends React.ComponentProps<"button">, VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+  loading?: boolean;
+  loadingLabel?: React.ReactNode;
+}
+
+function Button({ className, variant, size, asChild = false, loading = false, loadingLabel, disabled, children, ...props }: ButtonProps) {
+  const classes = cn(buttonVariants({ variant, size, className }));
+
+  if (asChild) {
+    return <Slot data-slot="button" className={classes} {...props}>{children}</Slot>;
+  }
+
+  return <button
+    data-slot="button"
+    data-loading={loading || undefined}
+    className={classes}
+    disabled={disabled || loading}
+    aria-busy={loading || undefined}
+    {...props}
+  >
+    {loading && <LoaderCircle className="animate-spin" aria-hidden="true" />}
+    {loading ? loadingLabel ?? children : children}
+  </button>;
 }
 export { Button, buttonVariants };
