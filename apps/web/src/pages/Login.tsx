@@ -4,9 +4,10 @@ import { ErrorNotice } from "../components";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { userMessage } from "../errors";
 
 export function LoginPage() {
-  const { sendMagicLink } = useAuth();
+  const { sendMagicLink, error: authError } = useAuth();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -26,7 +27,7 @@ export function LoginPage() {
       setEmail(normalizedEmail);
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível enviar o link");
+      setError(userMessage(err, "Não foi possível enviar o link de acesso. Tente novamente."));
     } finally {
       setBusy(false);
     }
@@ -48,7 +49,7 @@ export function LoginPage() {
             <Label>E-mail
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@exemplo.com" />
             </Label>
-            {error && <ErrorNotice message={error} />}
+            {(error || authError) && <ErrorNotice message={error || authError} />}
             <Button disabled={busy}>{busy ? "Enviando…" : "Receber link para entrar"}</Button>
             <small>Sem senha. O link expira e só funciona para você.</small>
           </form>

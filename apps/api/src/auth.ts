@@ -33,11 +33,13 @@ export async function requireAuthUser(
 
   const { data, error } = await authClient.auth.getUser(token);
   if (error || !data.user) {
-    await reply.code(401).send({ error: "Sessão inválida ou expirada" });
+    if (error) req.log.warn({ err: error }, "Supabase session validation failed");
+    await reply.code(401).send({ error: "Sua sessão expirou. Entre novamente para continuar." });
     return;
   }
   if (!data.user.email) {
-    await reply.code(403).send({ error: "Usuário autenticado sem e-mail" });
+    req.log.warn({ authUserId: data.user.id }, "Authenticated user has no email");
+    await reply.code(403).send({ error: "Não foi possível validar sua conta. Entre novamente." });
     return;
   }
   req.authUser = { id: data.user.id, email: data.user.email };

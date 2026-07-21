@@ -96,7 +96,8 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
       client = await findOrCreateClient(provider, body.client);
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode ?? 500;
-      return reply.code(status).send({ error: (err as Error).message });
+      if (status === 400) return reply.code(400).send({ error: (err as Error).message });
+      throw err;
     }
 
     // BR Code é gerado uma vez e congelado na parcela: o valor e a chave não
@@ -110,8 +111,9 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
         merchantCity: provider.city ?? "BRASIL",
       }).brCode;
     } catch (err) {
+      req.log.error({ err }, "Pix BR Code generation failed");
       return reply.code(422).send({
-        error: `Não foi possível gerar o Pix: ${(err as Error).message}`,
+        error: "Não foi possível gerar o Pix. Confira sua chave Pix e tente novamente.",
       });
     }
 

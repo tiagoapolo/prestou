@@ -57,7 +57,8 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         return { payment: { id: updated.id, status: updated.status, paidAt: updated.paid_at } };
       } catch (err) {
         if (err instanceof TransitionError) {
-          return reply.code(409).send({ error: err.message });
+          req.log.warn({ err }, "Payment transition rejected");
+          return reply.code(409).send({ error: "Esta cobrança foi atualizada. Recarregue a página e tente novamente." });
         }
         throw err;
       }
@@ -91,7 +92,8 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         return { payment: { id: updated.id, status: updated.status, paidAt: updated.paid_at } };
       } catch (err) {
         if (err instanceof TransitionError) {
-          return reply.code(409).send({ error: err.message });
+          req.log.warn({ err }, "Payment transition rejected");
+          return reply.code(409).send({ error: "Esta cobrança foi atualizada. Recarregue a página e tente novamente." });
         }
         throw err;
       }
@@ -140,7 +142,8 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         };
       } catch (err) {
         if (err instanceof TransitionError) {
-          return reply.code(409).send({ error: err.message });
+          req.log.warn({ err }, "Payment transition rejected");
+          return reply.code(409).send({ error: "Esta cobrança foi atualizada. Recarregue a página e tente novamente." });
         }
         throw err;
       }

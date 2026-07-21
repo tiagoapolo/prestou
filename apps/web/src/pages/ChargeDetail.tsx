@@ -5,6 +5,7 @@ import { ErrorNotice, Spinner } from "../components";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { userMessage } from "../errors";
 
 interface Detail {
   paymentId: string; description: string; amountLabel: string; dueDate: string;
@@ -17,7 +18,7 @@ export function ChargeDetailPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = () => api<Detail>(`/api/charges/${id}`).then(setDetail).catch((e) => setMessage(e.message));
+  const load = () => api<Detail>(`/api/charges/${id}`).then(setDetail).catch((cause) => setMessage(userMessage(cause, "Não foi possível carregar a cobrança. Tente novamente.")));
   useEffect(() => { void load(); }, [id]);
 
   async function action(kind: "confirm" | "mark-paid" | "contest") {
@@ -27,8 +28,17 @@ export function ChargeDetailPage() {
       const result = await api<{ whatsapp?: { deeplink: string } }>(`/api/payments/${detail.paymentId}/${kind}`, { method: "POST" });
       await load();
       if (result.whatsapp?.deeplink) window.location.href = result.whatsapp.deeplink;
-    } catch (e) { setMessage(e instanceof Error ? e.message : "Não foi possível concluir"); }
+    } catch (e) { setMessage(userMessage(e, "Não foi possível concluir a ação. Tente novamente.")); }
     finally { setBusy(false); }
+  }
+
+  async function copyPaymentLink() {
+    setMessage("");
+    try {
+      await navigator.clipboard.writeText(detail!.paymentUrl);
+    } catch {
+      setMessage("Não foi possível copiar o link. Selecione e copie o endereço manualmente.");
+    }
   }
 
   if (message && !detail) return <ErrorNotice message={message} />;
@@ -43,7 +53,7 @@ export function ChargeDetailPage() {
     <div className="action-stack">
       {detail.status === "cliente_confirmou" && <><Button disabled={busy} onClick={() => action("confirm")}>Confirmar que recebi</Button><Button disabled={busy} variant="destructive" onClick={() => action("contest")}>Não recebi — pedir conferência</Button></>}
       {(detail.status === "em_aberto" || detail.status === "atrasada") && <Button disabled={busy} variant="secondary" onClick={() => action("mark-paid")}>Marcar como paga manualmente</Button>}
-      <Button variant="secondary" onClick={() => navigator.clipboard.writeText(detail.paymentUrl)}>Copiar link da cobrança</Button>
+      <Button variant="secondary" onClick={copyPaymentLink}>Copiar link da cobrança</Button>
     </div>
   </div>;
 }
