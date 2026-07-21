@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { LoaderCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,7 +13,7 @@ export function ErrorNotice({ message }: { message: string }) {
 }
 
 export function AppShell() {
-  const { provider, signOut } = useAuth();
+  const { signOut } = useAuth();
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -21,11 +21,6 @@ export function AppShell() {
         <Button variant="ghost" size="sm" onClick={signOut} aria-label="Sair">Sair</Button>
       </header>
       <main className="app-content"><Outlet /></main>
-      <nav className="bottom-nav" aria-label="Navegação principal">
-        <NavLink to="/" end>Quem me deve</NavLink>
-        <NavLink to="/nova">Nova cobrança</NavLink>
-        <span className="nav-person">{provider?.name.split(" ")[0]}</span>
-      </nav>
     </div>
   );
 }

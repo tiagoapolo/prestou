@@ -192,7 +192,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
          JOIN charges c ON c.id = p.charge_id
          JOIN clients cl ON cl.id = c.client_id
         WHERE c.provider_id = ?
-        ORDER BY p.due_date ASC, p.created_at DESC`,
+        ORDER BY p.created_at DESC`,
       provider.id,
     );
 
@@ -230,7 +230,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
       list.reduce((acc, i) => acc + i.amountCents, 0);
 
     return {
-      items,
+      items: items.slice(0, 10),
       totals: {
         aReceberCents: sum(items.filter((i) => i.status !== "paga")),
         recebidoMesCents: sum(inMonth.filter((i) => i.status === "paga")),
