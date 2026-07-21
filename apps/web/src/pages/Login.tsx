@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { userMessage } from "../errors";
+import { Link } from "react-router-dom";
 
 export function LoginPage() {
   const { sendMagicLink, error: authError } = useAuth();
@@ -54,6 +55,7 @@ export function LoginPage() {
             <small>Sem senha. O link expira e só funciona para você.</small>
           </form>
         )}
+        <Link className="legal-link auth-legal-link" to="/privacidade">Política de Privacidade</Link>
       </section>
     </main>
   );

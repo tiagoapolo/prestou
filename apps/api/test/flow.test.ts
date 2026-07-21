@@ -348,6 +348,117 @@ test("F9 — painel agrega totais e deriva atrasada a partir do vencimento", asy
   assert.ok(body.totals.atrasadasCount >= 1);
 });
 
+test("lista cobranças recentes com paginação e filtros", async () => {
+  await createCharge(3100, "2030-05-10");
+  await createCharge(3200, "2030-05-11");
+
+  const clients = await app.inject({
+    method: "GET",
+    url: "/api/clients",
+    headers: auth(),
+  });
+  assert.equal(clients.statusCode, 200);
+  const client = clients.json().clients.find(
+    (item: { whatsapp: string }) => item.whatsapp === "11977776666",
+  );
+  assert.ok(client);
+
+  const firstPage = await app.inject({
+    method: "GET",
+    url: `/api/charges?page=1&pageSize=1&clientId=${client.id}&status=em_aberto&from=2030-05-01&to=2030-05-31`,
+    headers: auth(),
+  });
+  assert.equal(firstPage.statusCode, 200);
+  const body = firstPage.json();
+  assert.equal(body.items.length, 1);
+  assert.equal(body.items[0].client.id, client.id);
+  assert.equal(body.items[0].status, "em_aberto");
+  assert.equal(body.pagination.page, 1);
+  assert.equal(body.pagination.pageSize, 1);
+  assert.ok(body.pagination.total >= 2);
+  assert.ok(body.pagination.totalPages >= 2);
+
+  const secondPage = await app.inject({
+    method: "GET",
+    url: `/api/charges?page=2&pageSize=1&clientId=${client.id}&from=2030-05-01&to=2030-05-31`,
+    headers: auth(),
+  });
+  assert.equal(secondPage.statusCode, 200);
+  assert.equal(secondPage.json().items.length, 1);
+
+  const invalidPeriod = await app.inject({
+    method: "GET",
+    url: "/api/charges?from=2030-06-01&to=2030-05-01",
+    headers: auth(),
+  });
+  assert.equal(invalidPeriod.statusCode, 400);
+});
+
+test("lista somente os clientes do prestador autenticado", async () => {
+  const otherToken = await createAuthUser("clients-other");
+  const otherProvider = await app.inject({
+    method: "POST",
+    url: "/api/providers",
+    headers: { authorization: `Bearer ${otherToken}` },
+    payload: {
+      name: "Prestador Clientes",
+      profession: "Pintura",
+      whatsapp: "11944443333",
+      pixKey: "clientes@prestou.com",
+      consent: true,
+    },
+  });
+  assert.equal(otherProvider.statusCode, 201);
+  const otherCharge = await app.inject({
+    method: "POST",
+    url: "/api/charges",
+    headers: { authorization: `Bearer ${otherToken}` },
+    payload: {
+      client: { name: "Cliente de Outro", whatsapp: "11933332222" },
+      description: "Pintura",
+      amountCents: 4000,
+      dueDate: "2030-05-12",
+    },
+  });
+  assert.equal(otherCharge.statusCode, 201);
+
+  const clients = await app.inject({
+    method: "GET",
+    url: "/api/clients",
+    headers: auth(),
+  });
+  assert.equal(clients.statusCode, 200);
+  assert.equal(
+    clients.json().clients.some(
+      (client: { whatsapp: string }) => client.whatsapp === "11933332222",
+    ),
+    false,
+  );
+});
+
+test("resumo financeiro seleciona o mês e pagina suas cobranças", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/financial-summary?month=2030-05&page=1&pageSize=1",
+    headers: auth(),
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.month, "2030-05");
+  assert.equal(body.items.length, 1);
+  assert.equal(body.pagination.pageSize, 1);
+  assert.ok(body.pagination.total >= 2);
+  assert.ok(body.summary.totalCents >= 6300);
+  assert.ok(body.summary.pendingCents >= 6300);
+
+  const invalidMonth = await app.inject({
+    method: "GET",
+    url: "/api/financial-summary?month=2030-13",
+    headers: auth(),
+  });
+  assert.equal(invalidMonth.statusCode, 400);
+});
+
 test("funil registra os eventos que decidem o PSP na V2", async () => {
   const res = await app.inject({
     method: "GET",

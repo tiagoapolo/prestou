@@ -84,7 +84,7 @@ async function sendViaCloudApi(input: NotifyInput): Promise<void> {
   }
 
   const to = input.provider.whatsapp.replace(/\D/g, "");
-  const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
 
   const payload = input.template
     ? {

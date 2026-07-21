@@ -4,6 +4,7 @@ import { requireProvider } from "../auth.js";
 import { funnel, track, type EventType } from "../analytics.js";
 import { runReminders } from "../reminders.js";
 import { config } from "../config.js";
+import { purgeExpiredReceipts } from "../retention.js";
 
 const eventSchema = z.object({
   type: z.enum([
@@ -22,6 +23,12 @@ const eventSchema = z.object({
   paymentId: z.string().uuid().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
+
+function cronAuthorized(authorization?: string): boolean {
+  if (process.env.NODE_ENV === "test") return true;
+  const secret = authorization?.replace(/^Bearer\s+/i, "") ?? "";
+  return Boolean(config.cronSecret && secret === config.cronSecret);
+}
 
 export async function insightRoutes(app: FastifyInstance): Promise<void> {
   /** Ingestão de eventos disparados pelo painel do prestador. */
@@ -50,11 +57,18 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
    * em dev o servidor também roda de tempos em tempos (ver server.ts).
    */
   app.post("/api/internal/run-reminders", async (req, reply) => {
-    const secret = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
-    if (!process.env.NODE_ENV?.includes("test") && (!config.cronSecret || secret !== config.cronSecret)) {
+    if (!cronAuthorized(req.headers.authorization)) {
       return reply.code(401).send({ error: "Cron não autorizado" });
     }
     const result = await runReminders();
     return reply.send(result);
+  });
+
+  /** Expurgo diário de comprovantes 90 dias após a confirmação do pagamento. */
+  app.post("/api/internal/run-receipt-retention", async (req, reply) => {
+    if (!cronAuthorized(req.headers.authorization)) {
+      return reply.code(401).send({ error: "Cron não autorizado" });
+    }
+    return reply.send(await purgeExpiredReceipts());
   });
 }

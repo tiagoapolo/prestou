@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNotice } from "../components";
@@ -76,7 +77,7 @@ export function OnboardingPage() {
           <Label>Seu WhatsApp<Input name="whatsapp" required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={whatsapp} onChange={(event) => setWhatsapp(formatMobile(event.target.value))} maxLength={15} pattern="\([1-9][0-9]\) 9[0-9]{4}-[0-9]{4}" title="Informe um celular válido com DDD" /></Label>
           <Label>Chave Pix<Input name="pixKey" required placeholder="CPF, celular, e-mail ou aleatória" /></Label>
           <Label>Cidade/município <span className="optional">opcional</span><CityAutocomplete /></Label>
-          <Label className="check-row"><Checkbox name="consent" required checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} /> <span>Concordo com o uso destes dados para criar e acompanhar minhas cobranças.</span></Label>
+          <Label className="check-row"><Checkbox name="consent" required checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} /> <span>Li a <Link className="legal-link" to="/privacidade" target="_blank">Política de Privacidade</Link> e concordo com o uso destes dados para criar e acompanhar minhas cobranças.</span></Label>
           {error && <ErrorNotice message={error} />}
           <Button disabled={busy}>{busy ? "Salvando…" : "Começar a cobrar"}</Button>
         </form>

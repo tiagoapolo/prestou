@@ -26,3 +26,10 @@ export async function signedReceiptUrl(objectPath: string): Promise<string> {
   if (error) throw error;
   return data.signedUrl;
 }
+
+export async function deleteReceipt(objectPath: string): Promise<void> {
+  const { error } = await storageClient.storage
+    .from(config.supabase.receiptsBucket)
+    .remove([objectPath]);
+  if (error) throw error;
+}

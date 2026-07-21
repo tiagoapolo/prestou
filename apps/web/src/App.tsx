@@ -8,6 +8,7 @@ import { NewChargePage } from "./pages/NewCharge";
 import { OnboardingPage } from "./pages/Onboarding";
 import { PublicPaymentPage } from "./pages/PublicPayment";
 import { SettingsPage } from "./pages/Settings";
+import { PrivacyPage } from "./pages/Privacy";
 
 function PrivateApp() {
   const auth = useAuth();
@@ -31,6 +32,7 @@ function PrivateApp() {
 export function App() {
   return (
     <Routes>
+      <Route path="/privacidade" element={<PrivacyPage />} />
       <Route path="/pay/:token" element={<PublicPaymentPage />} />
       <Route path="/*" element={<PrivateApp />} />
     </Routes>

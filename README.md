@@ -237,6 +237,20 @@ Authorization: Bearer <CRON_SECRET>
 
 O processamento é idempotente por pagamento e dia.
 
+## Privacidade e retenção
+
+A Política de Privacidade fica disponível em `/privacidade`. Comprovantes são
+mantidos no bucket privado e eliminados 90 dias após a cobrança ser marcada
+como paga. Configure uma chamada diária, com o mesmo `CRON_SECRET`:
+
+```http
+POST /api/internal/run-receipt-retention
+Authorization: Bearer <CRON_SECRET>
+```
+
+O procedimento para solicitações de acesso, correção e exclusão está em
+[`docs/lgpd-operacao.md`](./docs/lgpd-operacao.md).
+
 ## Railway
 
 O [`railway.json`](./railway.json) da raiz atende os dois serviços. O script de
