@@ -7,18 +7,19 @@ import { Label } from "@/components/ui/label";
 import { userMessage } from "../errors";
 import { Link } from "react-router-dom";
 
-function emailClient(email: string) {
-  const domain = email.split("@").at(-1)?.toLowerCase();
-
-  if (domain === "gmail.com" || domain === "googlemail.com") {
-    return { href: "https://mail.google.com/mail/u/0/#inbox", label: "Abrir Gmail", opensNewTab: true };
+function openEmailClient(appUrl: string, webUrl: string) {
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!isMobile) {
+    window.open(webUrl, "_blank", "noopener,noreferrer");
+    return;
   }
 
-  if (["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain ?? "")) {
-    return { href: "https://outlook.live.com/mail/0/inbox", label: "Abrir Outlook", opensNewTab: true };
-  }
+  const fallback = window.setTimeout(() => {
+    if (document.visibilityState === "visible") window.location.assign(webUrl);
+  }, 1200);
 
-  return { href: "mailto:", label: "Abrir aplicativo de e-mail", opensNewTab: false };
+  window.addEventListener("pagehide", () => window.clearTimeout(fallback), { once: true });
+  window.location.assign(appUrl);
 }
 
 export function LoginPage() {
@@ -48,8 +49,6 @@ export function LoginPage() {
     }
   }
 
-  const client = emailClient(email);
-
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -59,11 +58,10 @@ export function LoginPage() {
         {sent ? (
           <div className="stack">
             <p>Enviamos um link seguro para <strong>{email}</strong>. Toque nele para entrar.</p>
-            <Button asChild>
-              <a href={client.href} target={client.opensNewTab ? "_blank" : undefined} rel={client.opensNewTab ? "noreferrer" : undefined}>
-                {client.label}
-              </a>
-            </Button>
+            <div className="email-client-actions" aria-label="Escolha seu aplicativo de e-mail">
+              <Button type="button" className="email-client-button gmail-button" onClick={() => openEmailClient("googlegmail://", "https://mail.google.com/mail/u/0/#inbox")}>Abrir Gmail</Button>
+              <Button type="button" className="email-client-button outlook-button" onClick={() => openEmailClient("ms-outlook://", "https://outlook.live.com/mail/0/inbox")}>Abrir Outlook</Button>
+            </div>
             <Button variant="secondary" onClick={() => setSent(false)}>Usar outro e-mail</Button>
           </div>
         ) : (
