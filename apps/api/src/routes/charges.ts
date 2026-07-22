@@ -32,6 +32,8 @@ const paginationSchema = z.object({
 
 const chargeListQuerySchema = paginationSchema.extend({
   clientId: z.string().uuid().optional(),
+  /** Busca por nome de cliente (server-side, ADR-009). */
+  q: z.string().trim().min(1).max(80).optional(),
   status: z.enum(["em_aberto", "cliente_confirmou", "paga", "atrasada"]).optional(),
   from: isoDateSchema.optional(),
   to: isoDateSchema.optional(),
@@ -237,7 +239,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const provider = req.provider!;
-    const { page, pageSize, clientId, status, from, to } = parsed.data;
+    const { page, pageSize, clientId, q, status, from, to } = parsed.data;
     const today = todayISO();
     const conditions = ["c.provider_id = ?"];
     const params: Array<string | number> = [provider.id];
@@ -245,6 +247,10 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
     if (clientId) {
       conditions.push("c.client_id = ?");
       params.push(clientId);
+    }
+    if (q) {
+      conditions.push("cl.name ILIKE ?");
+      params.push(`%${q}%`);
     }
     if (status === "atrasada") {
       conditions.push("p.status = 'em_aberto'", "p.due_date < ?");
@@ -270,6 +276,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
       `SELECT COUNT(*) AS total
          FROM payments p
          JOIN charges c ON c.id = p.charge_id
+         JOIN clients cl ON cl.id = c.client_id
         WHERE ${where}`,
       ...params,
     );

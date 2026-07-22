@@ -6,7 +6,8 @@ import type { ProviderRow } from "./types.js";
 export type NotificationKind =
   | "client_confirmed" // cliente tocou "já paguei"
   | "reminder" // vencimento / atraso
-  | "contest_followup"; // prestador contestou, mensagem pronta pro cliente
+  | "contest_followup" // prestador contestou, mensagem pronta pro cliente
+  | "whatsapp_verification"; // código para vincular o WhatsApp do prestador
 
 export interface NotifyInput {
   provider: ProviderRow;

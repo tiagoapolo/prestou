@@ -1,11 +1,7 @@
 import { config } from "./config.js";
+import { formatBRL } from "./format.js";
 
-export function formatBRL(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
+export { formatBRL };
 
 /** Link público da página de pagamento do cliente. */
 export function paymentUrl(publicToken: string): string {

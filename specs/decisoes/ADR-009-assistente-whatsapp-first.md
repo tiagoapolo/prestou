@@ -255,8 +255,10 @@ armazenar texto integral nem dados identificáveis.
 
 - **Segurança do inbound**: assinatura da Meta e vínculo de número são a
   superfície crítica; número não verificado nunca é atendido.
-- **Assistente do Dashboard**: manter ativo para o prestador (recomendado) ou
-  rebaixar a ferramenta interna de dev — decisão de Produto.
+- **Assistente do Dashboard**: ~~manter ativo para o prestador (recomendado) ou
+  rebaixar a ferramenta interna de dev~~ — **decidido (2026-07-22): manter ativo
+  para o prestador.** A porta `POST /api/assistant/chat` serve tanto o prestador
+  quanto o banco de testes local do orquestrador; ambos usam o mesmo cérebro.
 - **Divergência documental**: existem dois "ADR-008" (vault "Propostas
   persistidas para ações financeiras" vs repo "Assistente conversacional
   híbrido") — reconciliar numeração/títulos.

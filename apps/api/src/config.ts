@@ -24,6 +24,10 @@ export const config = {
     phoneNumberId: env("WHATSAPP_PHONE_NUMBER_ID"),
     accessToken: env("WHATSAPP_ACCESS_TOKEN"),
     templateLang: env("WHATSAPP_TEMPLATE_LANG", "pt_BR"),
+    // Webhook inbound: verify token (handshake GET) e app secret (assinatura
+    // X-Hub-Signature-256 dos POSTs). Só exigidos quando o inbound está ativo.
+    verifyToken: env("WHATSAPP_VERIFY_TOKEN"),
+    appSecret: env("WHATSAPP_APP_SECRET"),
   },
   supabase: {
     url: requiredEnv("SUPABASE_URL"),

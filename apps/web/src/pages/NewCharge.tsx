@@ -28,7 +28,7 @@ export function NewChargePage() {
   const started = useRef(assistantDraft?.startedAt ?? Date.now());
   const [clients, setClients] = useState<Client[]>([]);
   const [clientsLoading, setClientsLoading] = useState(true);
-  const [selected, setSelected] = useState(assistantDraft?.client.id ?? "");
+  const [selected, setSelected] = useState("");
   const [created, setCreated] = useState<Created | null>(null);
   const [busy, setBusy] = useState(false);
   const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
@@ -49,6 +49,16 @@ export function NewChargePage() {
       })
       .finally(() => setClientsLoading(false));
   }, []);
+
+  // Quando o assistente já identificou um cliente cadastrado, seleciona-o só
+  // depois que a lista chega: o Select (Radix) só reflete o valor se o item
+  // correspondente já estiver montado, então aplicamos num commit separado.
+  useEffect(() => {
+    const draftClientId = assistantDraft?.client.id;
+    if (draftClientId && clients.some((client) => client.id === draftClientId)) {
+      setSelected(draftClientId);
+    }
+  }, [clients]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");

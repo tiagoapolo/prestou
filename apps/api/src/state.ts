@@ -1,6 +1,9 @@
 import { queryOne, withTransaction, type DatabaseClient } from "./db.js";
 import { newId } from "./ids.js";
+import { saoPauloDateISO } from "./dates.js";
 import type { DerivedStatus, PaymentRow, PaymentStatus } from "./types.js";
+
+export { saoPauloDateISO };
 
 export class TransitionError extends Error {
   statusCode = 409;
@@ -123,5 +126,5 @@ export function derivedStatus(payment: PaymentRow, today = todayISO()): DerivedS
 }
 
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return saoPauloDateISO();
 }

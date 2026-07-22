@@ -9,6 +9,7 @@ import { publicRoutes } from "./routes/public.js";
 import { insightRoutes } from "./routes/insights.js";
 import { actionProposalRoutes } from "./routes/action-proposals.js";
 import { assistantRoutes } from "./routes/assistant.js";
+import { whatsappSettingsRoutes, whatsappWebhookRoutes } from "./routes/whatsapp.js";
 import { runReminders } from "./reminders.js";
 import { closeDatabase } from "./db.js";
 import { publicErrorMessage } from "./public-errors.js";
@@ -42,6 +43,8 @@ export async function buildServer() {
   await app.register(insightRoutes);
   await app.register(actionProposalRoutes);
   await app.register(assistantRoutes);
+  await app.register(whatsappSettingsRoutes);
+  await app.register(whatsappWebhookRoutes);
 
   app.setNotFoundHandler((_req, reply) => {
     return reply.code(404).send({ error: "Endereço não encontrado" });

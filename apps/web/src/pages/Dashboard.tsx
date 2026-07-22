@@ -19,9 +19,24 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [filter, setFilter] = useState<"todas" | PaymentStatus>("todas");
+  const [search, setSearch] = useState("");
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => { api<DashboardData>("/api/charges").then(setData).catch((cause) => setError(userMessage(cause, "Não foi possível carregar as cobranças. Tente novamente."))); }, []);
+  // Busca por nome resolvida no servidor (ADR-009): debounce e refetch, com
+  // feedback de "buscando" enquanto a requisição está em voo.
+  useEffect(() => {
+    const term = search.trim();
+    const path = term ? `/api/charges?q=${encodeURIComponent(term)}` : "/api/charges";
+    if (term) setSearching(true);
+    const timer = setTimeout(() => {
+      api<DashboardData>(path)
+        .then(setData)
+        .catch((cause) => setError(userMessage(cause, "Não foi possível carregar as cobranças. Tente novamente.")))
+        .finally(() => setSearching(false));
+    }, term ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [search]);
   const items = useMemo(() => data?.items.filter((item) => filter === "todas" || item.status === filter) ?? [], [data, filter]);
   if (error) return <ErrorNotice message={error} />;
   if (!data) return <Spinner />;
@@ -36,12 +51,17 @@ export function DashboardPage() {
       <AssistantCommand onDraft={(draft, startedAt) => navigate("/nova", {
         state: { assistantDraft: { ...draft, startedAt } },
       })} />
+      <hr className="chat-divider" />
       {(data.totals.atrasadasCount > 0 || data.totals.aguardandoValidacaoCount > 0) && (
         <div className="attention-strip">
           {data.totals.aguardandoValidacaoCount > 0 && <Button variant="secondary" onClick={() => setFilter("cliente_confirmou")}>{data.totals.aguardandoValidacaoCount} para validar</Button>}
           {data.totals.atrasadasCount > 0 && <Button variant="secondary" onClick={() => setFilter("atrasada")}>{data.totals.atrasadasCount} atrasada{data.totals.atrasadasCount > 1 ? "s" : ""}</Button>}
         </div>
       )}
+      <div className="assistant-input-row search-row">
+        <input aria-label="Buscar por nome do cliente" value={search} onChange={(event) => setSearch(event.target.value)} maxLength={80} placeholder="Buscar por nome do cliente" />
+        {searching && <span className="search-status" role="status">Buscando…</span>}
+      </div>
       <div className="filter-row">
         {(["todas", "em_aberto", "cliente_confirmou", "atrasada", "paga"] as const).map((key) => <Button size="sm" variant={filter === key ? "default" : "outline"} key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{key === "todas" ? "Todas" : labels[key]}</Button>)}
       </div>
@@ -62,7 +82,8 @@ interface AssistantDraft {
 
 type AssistantResponse =
   | { kind: "draft"; message: string; draft: AssistantDraft }
-  | { kind: "clarification"; message: string };
+  | { kind: "clarification"; message: string }
+  | { kind: "text"; message: string };
 
 function AssistantCommand({
   onDraft,
@@ -83,7 +104,7 @@ function AssistantCommand({
     if (startedAt === null) setStartedAt(journeyStartedAt);
     setBusy(true); setError(""); setReply("");
     try {
-      const result = await api<AssistantResponse>("/api/assistant/interpret", {
+      const result = await api<AssistantResponse>("/api/assistant/chat", {
         method: "POST",
         body: JSON.stringify({ message: text }),
       });
@@ -97,8 +118,8 @@ function AssistantCommand({
   }
 
   return <Card asChild className="assistant-card"><form onSubmit={submit}>
-    <div className="assistant-heading"><Sparkles aria-hidden="true" /><div><strong>Criar falando do seu jeito</strong><small>Assistente experimental</small></div></div>
-    <div className="assistant-input-row"><input aria-label="Pedido de cobrança" value={message} onChange={(event) => setMessage(event.target.value)} maxLength={500} placeholder="Ex.: cobra R$ 80 do João pela lavagem, vence amanhã" /><Button loading={busy} loadingLabel="Lendo…" disabled={message.trim().length < 3}>Preparar</Button></div>
+    <div className="assistant-heading"><Sparkles aria-hidden="true" /><div><strong>Cobrar ou consultar falando</strong><small>Cobre, veja quem está devendo ou peça o resumo · experimental</small></div></div>
+    <div className="assistant-input-row"><input aria-label="Mensagem para o assistente" value={message} onChange={(event) => setMessage(event.target.value)} maxLength={500} placeholder="Ex.: cobra R$ 80 do João pela lavagem — ou “quem está me devendo?”" /><Button loading={busy} loadingLabel="Lendo…" disabled={message.trim().length < 3}>Enviar</Button></div>
     {reply && <p className="assistant-reply">{reply}</p>}
     {error && <ErrorNotice message={error} />}
   </form></Card>;
