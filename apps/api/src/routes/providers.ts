@@ -30,6 +30,9 @@ const createProviderSchema = z.object({
 const updateSettingsSchema = z.object({
   whatsapp: mobileSchema,
   pixKey: requiredText("Chave Pix", 3, 80),
+  defaultDueDays: z.union([
+    z.literal(0), z.literal(1), z.literal(5), z.literal(15), z.literal(30),
+  ]).optional(),
 });
 
 function publicProvider(p: ProviderRow) {
@@ -45,6 +48,7 @@ function publicProvider(p: ProviderRow) {
     // A chave Pix é exibida mascarada; o valor cru só é usado para gerar o BR Code.
     pixKeyMasked: maskKey(p.pix_key),
     whatsapp: p.whatsapp,
+    defaultDueDays: p.default_due_days,
     createdAt: p.created_at,
   };
 }
@@ -155,6 +159,7 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
       settings: {
         pixKey: req.provider!.pix_key,
         whatsapp: req.provider!.whatsapp,
+        defaultDueDays: req.provider!.default_due_days,
       },
     };
   });
@@ -177,13 +182,17 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    const defaultDueDays = parsed.data.defaultDueDays
+      ?? req.provider!.default_due_days;
+
     await execute(
       `UPDATE providers
-       SET pix_key = ?, pix_key_type = ?, whatsapp = ?
+       SET pix_key = ?, pix_key_type = ?, whatsapp = ?, default_due_days = ?
        WHERE id = ?`,
       keyInfo.normalized,
       keyInfo.type,
       parsed.data.whatsapp,
+      defaultDueDays,
       req.provider!.id,
     );
 
@@ -191,6 +200,7 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
       settings: {
         pixKey: keyInfo.normalized,
         whatsapp: parsed.data.whatsapp,
+        defaultDueDays,
       },
     };
   });

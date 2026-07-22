@@ -3,6 +3,8 @@ export type PaymentStatus = "em_aberto" | "cliente_confirmou" | "paga";
 /** Estado derivado (nunca persistido): em_aberto + vencimento passado. */
 export type DerivedStatus = PaymentStatus | "atrasada";
 
+export type DefaultDueDays = 0 | 1 | 5 | 15 | 30;
+
 export interface ProviderRow {
   id: string;
   auth_user_id: string | null;
@@ -16,6 +18,7 @@ export interface ProviderRow {
   pix_key: string;
   pix_key_type: string;
   whatsapp: string;
+  default_due_days: DefaultDueDays;
   consent_at: string;
   created_at: string;
 }

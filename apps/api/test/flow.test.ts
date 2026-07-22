@@ -80,6 +80,7 @@ before(async () => {
   assert.equal(res.statusCode, 201);
   const body = res.json();
   assert.equal(body.provider.pixKeyType, "phone");
+  assert.equal(body.provider.defaultDueDays, 0);
 });
 
 after(async () => {
@@ -139,6 +140,7 @@ test("prestador consulta e altera apenas suas configurações de recebimento", a
   });
   assert.equal(current.statusCode, 200);
   assert.equal(current.json().settings.pixKey, "+5511999998888");
+  assert.equal(current.json().settings.defaultDueDays, 0);
 
   const updated = await app.inject({
     method: "PATCH",
@@ -147,12 +149,14 @@ test("prestador consulta e altera apenas suas configurações de recebimento", a
     payload: {
       pixKey: "joao@prestou.com",
       whatsapp: "(11) 97777-6655",
+      defaultDueDays: 15,
     },
   });
   assert.equal(updated.statusCode, 200);
   assert.deepEqual(updated.json().settings, {
     pixKey: "joao@prestou.com",
     whatsapp: "11977776655",
+    defaultDueDays: 15,
   });
 
   const provider = await app.inject({
@@ -162,6 +166,19 @@ test("prestador consulta e altera apenas suas configurações de recebimento", a
   });
   assert.equal(provider.json().provider.pixKeyType, "email");
   assert.equal(provider.json().provider.whatsapp, "11977776655");
+  assert.equal(provider.json().provider.defaultDueDays, 15);
+
+  const invalidDueDays = await app.inject({
+    method: "PATCH",
+    url: "/api/providers/me/settings",
+    headers: auth(),
+    payload: {
+      pixKey: "joao@prestou.com",
+      whatsapp: "11977776655",
+      defaultDueDays: 2,
+    },
+  });
+  assert.equal(invalidDueDays.statusCode, 400);
 
   const invalid = await app.inject({
     method: "PATCH",

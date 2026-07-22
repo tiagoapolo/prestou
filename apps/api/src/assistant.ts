@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { amountCentsSchema, isoDateSchema, mobileSchema, requiredText } from "./validation.js";
+import type { DefaultDueDays } from "./types.js";
 
 const extractedChargeSchema = z.object({
   clientName: z.string().nullable(),
@@ -40,6 +41,7 @@ interface InterpretOptions {
   model: string;
   providerId: string;
   clients: AssistantClient[];
+  defaultDueDays?: DefaultDueDays;
   fetchImpl?: typeof fetch;
   now?: Date;
   timeoutMs?: number;
@@ -100,6 +102,7 @@ function clarification(fields: string[]): AssistantResult {
 function buildDraft(
   extracted: z.infer<typeof extractedChargeSchema>,
   clients: AssistantClient[],
+  defaultDueDate: string,
 ): AssistantResult {
   const missing: string[] = [];
   const clientName = validText(extracted.clientName, "Nome do cliente", 2, 80);
@@ -108,7 +111,7 @@ function buildDraft(
     ? null
     : amountCentsSchema.safeParse(extracted.amountCents);
   const dueDate = extracted.dueDate === null
-    ? null
+    ? isoDateSchema.safeParse(defaultDueDate)
     : isoDateSchema.safeParse(extracted.dueDate);
   const whatsapp = extracted.clientWhatsapp === null
     ? null
@@ -117,9 +120,9 @@ function buildDraft(
   if (!clientName) missing.push("o cliente");
   if (!description) missing.push("o serviço");
   if (!amount || !amount.success) missing.push("o valor");
-  if (!dueDate || !dueDate.success) missing.push("o vencimento");
+  if (!dueDate.success) missing.push("o vencimento");
   if (missing.length > 0) return clarification(missing);
-  if (!clientName || !description || !amount?.success || !dueDate?.success) {
+  if (!clientName || !description || !amount?.success || !dueDate.success) {
     throw new AssistantServiceError("O rascunho não contém todos os campos obrigatórios");
   }
 
@@ -162,6 +165,7 @@ export async function interpretChargeMessage(
   options: InterpretOptions,
 ): Promise<AssistantResult> {
   const today = saoPauloDate(options.now ?? new Date());
+  const defaultDueDate = addDaysISO(today, options.defaultDueDays ?? 0);
   const fetchImpl = options.fetchImpl ?? fetch;
   let response: Response;
   try {
@@ -235,5 +239,11 @@ export async function interpretChargeMessage(
   }
   const extracted = extractedChargeSchema.safeParse(argumentsValue);
   if (!extracted.success) throw new AssistantServiceError("Campos inválidos do assistente");
-  return buildDraft(extracted.data, options.clients);
+  return buildDraft(extracted.data, options.clients, defaultDueDate);
+}
+
+function addDaysISO(value: string, days: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day! + days));
+  return date.toISOString().slice(0, 10);
 }

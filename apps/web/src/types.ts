@@ -1,4 +1,5 @@
 export type PaymentStatus = "em_aberto" | "cliente_confirmou" | "paga" | "atrasada";
+export type DefaultDueDays = 0 | 1 | 5 | 15 | 30;
 
 export interface Provider {
   id: string;
@@ -11,6 +12,7 @@ export interface Provider {
   pixKeyType: string;
   pixKeyMasked: string;
   whatsapp: string;
+  defaultDueDays: DefaultDueDays;
 }
 
 export interface ChargeItem {

@@ -7,8 +7,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { dateToISO, formatDate, formatMobile, formatMoney, isValidMobile, isoToDate, moneyToCents, normalizeMobile } from "../formats";
+import { dateAfterDaysISO, dateToISO, formatDate, formatMobile, formatMoney, isValidMobile, isoToDate, moneyToCents, normalizeMobile } from "../formats";
 import { userMessage } from "../errors";
+import { useAuth } from "../auth";
 
 interface Client { id: string; name: string; whatsapp: string }
 interface Created { payment: { id: string }; whatsapp: { deeplink: string; message: string } }
@@ -21,6 +22,7 @@ interface AssistantDraft {
 }
 
 export function NewChargePage() {
+  const { provider } = useAuth();
   const location = useLocation();
   const assistantDraft = (location.state as { assistantDraft?: AssistantDraft } | null)?.assistantDraft;
   const started = useRef(assistantDraft?.startedAt ?? Date.now());
@@ -35,7 +37,9 @@ export function NewChargePage() {
   const [clientWhatsapp, setClientWhatsapp] = useState(() => formatMobile(assistantDraft?.client.whatsapp ?? ""));
   const [description, setDescription] = useState(assistantDraft?.description ?? "");
   const [amount, setAmount] = useState(() => assistantDraft ? formatMoney(String(assistantDraft.amountCents)) : "");
-  const [dueDate, setDueDate] = useState(() => isoToDate(assistantDraft?.dueDate ?? new Date().toISOString().slice(0, 10)));
+  const [dueDate, setDueDate] = useState(() => isoToDate(
+    assistantDraft?.dueDate ?? dateAfterDaysISO(provider?.defaultDueDays ?? 0),
+  ));
   useEffect(() => {
     api<{ clients: Client[] }>("/api/clients")
       .then((response) => setClients(response.clients))

@@ -112,12 +112,14 @@ test("não escolhe um cliente quando nome e WhatsApp apontam para pessoas difere
   });
 });
 
-test("não inventa campos ausentes e pede complemento", async () => {
+test("usa o vencimento padrão quando a mensagem não informa uma data", async () => {
   const result = await interpretChargeMessage("cobra o João", {
     apiKey: "test-key",
     model: "gpt-5.4-nano",
     providerId: "provider-1",
     clients,
+    defaultDueDays: 15,
+    now: new Date("2026-07-21T15:00:00Z"),
     fetchImpl: openAiFetch({
       clientName: "João",
       clientWhatsapp: null,
@@ -129,8 +131,24 @@ test("não inventa campos ausentes e pede complemento", async () => {
 
   assert.deepEqual(result, {
     kind: "clarification",
-    message: "Para preparar a cobrança, informe o serviço, o valor, o vencimento.",
+    message: "Para preparar a cobrança, informe o serviço, o valor.",
   });
+});
+
+test("preenche D+15 no rascunho quando os outros campos estão completos", async () => {
+  const result = await interpretChargeMessage("cobra 80 do João pela lavagem", {
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    providerId: "provider-1",
+    clients,
+    defaultDueDays: 15,
+    now: new Date("2026-07-21T15:00:00Z"),
+    fetchImpl: openAiFetch({ ...complete, dueDate: null }),
+  });
+
+  assert.equal(result.kind, "draft");
+  if (result.kind !== "draft") return;
+  assert.equal(result.draft.dueDate, "2026-08-05");
 });
 
 test("falha de forma controlada quando a OpenAI fica indisponível", async () => {

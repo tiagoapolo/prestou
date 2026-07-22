@@ -33,6 +33,7 @@ export async function assistantRoutes(app: FastifyInstance): Promise<void> {
       model: config.openai.model,
       providerId: req.provider!.id,
       clients,
+      defaultDueDays: req.provider!.default_due_days,
       timeoutMs: config.openai.timeoutMs,
     });
     return reply.send(result);
