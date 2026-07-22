@@ -22,6 +22,8 @@ Implementado:
 - painel “quem me deve”;
 - lembretes D+0, D+2 e D+5;
 - notificações ao prestador pela Meta Cloud API;
+- assistente bidirecional no WhatsApp com confirmação de cobrança por botões;
+- guardrails persistentes de custo, abuso, duplicidade e concorrência;
 - analytics do funil e auditoria de transições;
 - PostgreSQL e Storage privado no Supabase em todos os ambientes.
 
@@ -158,6 +160,15 @@ WHATSAPP_MODE=log
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_TEMPLATE_LANG=pt_BR
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_APP_SECRET=
+
+WHATSAPP_RATE_LIMIT_PER_MINUTE=10
+WHATSAPP_DAILY_MESSAGE_LIMIT=100
+WHATSAPP_MAX_MESSAGE_LENGTH=1000
+WHATSAPP_GLOBAL_DAILY_AI_LIMIT=5000
+WHATSAPP_ABUSE_COOLDOWN_MINUTES=30
+WHATSAPP_INVALID_STREAK_LIMIT=3
 ```
 
 Use a URL do Transaction Pooler do Supabase em `DATABASE_URL`. A service role e a URL do banco são segredos exclusivos da API e nunca podem chegar ao navegador.
@@ -189,7 +200,32 @@ Templates esperados:
 - `pagamento_confirmado_cliente`;
 - `lembrete_cobranca_prestador`.
 
-No MVP, a automação é estritamente Prestou → prestador. Mensagens ao cliente são abertas como links `wa.me` e enviadas manualmente pelo prestador.
+Enquanto os templates definitivos não estiverem aprovados, valide o envio com
+o template de teste da Meta. O destinatário deve estar autorizado na seção de
+configuração da API do WhatsApp:
+
+```bash
+pnpm test:whatsapp -- --to 5511999999999
+```
+
+O comando usa `hello_world` em `en_US` e lê as credenciais de
+`apps/api/.env.local`. Para somente conferir o payload, acrescente `--dry-run`.
+O segundo template temporário também pode ser exercitado:
+
+```bash
+pnpm test:whatsapp -- --to 5511999999999 \
+  --template jaspers_market_order_confirmation_v1 \
+  --param Maria --param PEDIDO-123 --param amanhã
+```
+
+O assistente do prestador também recebe mensagens pelo webhook, compartilha o
+mesmo orquestrador do Dashboard e cria cobranças somente após confirmação nos
+botões **Criar cobrança / Cancelar**. Mensagens ao cliente final continuam sendo
+abertas como links `wa.me` e enviadas manualmente pelo prestador.
+
+A configuração completa da Meta, vínculo do número, token permanente, webhook,
+guardrails de custo, testes e diagnóstico estão em
+[`docs/whatsapp-operacao.md`](./docs/whatsapp-operacao.md).
 
 ## Qualidade
 
@@ -296,6 +332,8 @@ HTTPS público da API. O Railway fornece `PORT` automaticamente. Não use
 - comprovantes ficam em bucket privado;
 - downloads usam URLs assinadas e temporárias;
 - a API deriva o prestador do JWT validado;
+- o webhook valida a assinatura da Meta e deriva o prestador de número verificado;
+- limites do WhatsApp são aplicados no PostgreSQL antes de chamar a OpenAI;
 - a página pública não expõe nome ou telefone do cliente;
 - toda transição de pagamento é atômica e auditada.
 

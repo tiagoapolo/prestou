@@ -20,10 +20,87 @@ export function verifySignature(
   return timingSafeEqual(expectedBuf, providedBuf);
 }
 
-/** Mensagem inbound já normalizada (só o que o orquestrador precisa). */
-export interface InboundMessage {
+/** Mensagem inbound já normalizada para texto ou clique em botão. */
+export type InboundMessage = {
+  id: string;
   from: string;
+  kind: "text";
   text: string;
+} | {
+  id: string;
+  from: string;
+  kind: "button";
+  buttonId: string;
+};
+
+export type WhatsAppChargeAction = "create" | "cancel";
+
+export function whatsappChargeActionId(
+  action: WhatsAppChargeAction,
+  proposalId: string,
+): string {
+  return `charge:${action}:${proposalId}`;
+}
+
+export function parseWhatsAppChargeAction(
+  buttonId: string,
+): { action: WhatsAppChargeAction; proposalId: string } | undefined {
+  const match = /^charge:(create|cancel):([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.exec(buttonId);
+  if (!match) return undefined;
+  return {
+    action: match[1] as WhatsAppChargeAction,
+    proposalId: match[2]!,
+  };
+}
+
+export function chargeConfirmationPayload(
+  to: string,
+  text: string,
+  proposalId: string,
+) {
+  return {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text },
+      action: {
+        buttons: [
+          {
+            type: "reply",
+            reply: {
+              id: whatsappChargeActionId("create", proposalId),
+              title: "Criar cobrança",
+            },
+          },
+          {
+            type: "reply",
+            reply: {
+              id: whatsappChargeActionId("cancel", proposalId),
+              title: "Cancelar",
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
+/**
+ * A Meta pode entregar o wa_id brasileiro sem o nono dígito, mesmo quando o
+ * número autorizado e cadastrado usa o formato móvel atual. Consideramos as
+ * duas formas somente para resolver a identidade já verificada no banco.
+ */
+export function whatsappIdentityCandidates(from: string): [string, string] {
+  const digits = from.replace(/\D/g, "");
+  if (/^55\d{10}$/.test(digits)) {
+    return [digits, `${digits.slice(0, 4)}9${digits.slice(4)}`];
+  }
+  if (/^55\d{2}9\d{8}$/.test(digits)) {
+    return [digits, `${digits.slice(0, 4)}${digits.slice(5)}`];
+  }
+  return [digits, digits];
 }
 
 /**
@@ -42,10 +119,17 @@ export function parseInboundMessage(payload: unknown): InboundMessage | undefine
       const messages = (change as { value?: { messages?: unknown } }).value?.messages;
       if (!Array.isArray(messages)) continue;
       for (const message of messages) {
+        const id = (message as { id?: unknown }).id;
         const from = (message as { from?: unknown }).from;
         const text = (message as { text?: { body?: unknown } }).text?.body;
-        if (typeof from === "string" && typeof text === "string" && text.trim()) {
-          return { from, text: text.trim() };
+        if (typeof id === "string" && typeof from === "string" && typeof text === "string" && text.trim()) {
+          return { id, from, kind: "text", text: text.trim() };
+        }
+        const buttonId = (
+          message as { interactive?: { button_reply?: { id?: unknown } } }
+        ).interactive?.button_reply?.id;
+        if (typeof id === "string" && typeof from === "string" && typeof buttonId === "string" && buttonId) {
+          return { id, from, kind: "button", buttonId };
         }
       }
     }
@@ -67,7 +151,7 @@ export function renderResult(result: AssistantResult): string {
       `• Serviço: ${draft.description}\n` +
       `• Valor: ${(draft.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}\n` +
       `• Vencimento: ${draft.dueDate}\n` +
-      "Abra o Prestou para revisar e criar a cobrança."
+      "Confirme abaixo para criar a cobrança."
     );
   }
   return result.message;

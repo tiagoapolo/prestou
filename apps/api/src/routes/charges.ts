@@ -1,25 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { generatePixBrCode } from "@prestou/pix";
-import { execute, queryAll, queryOne, withTransaction } from "../db.js";
-import { newId, newPublicToken } from "../ids.js";
+import { queryAll, queryOne, withTransaction } from "../db.js";
 import { requireProvider } from "../auth.js";
-import { track } from "../analytics.js";
+import { chargeDraftSchema, createCharge } from "../charge-creation.js";
 import { chargeMessage, paymentUrl, waMeLink, formatBRL } from "../messages.js";
 import { derivedStatus, todayISO } from "../state.js";
-import type { ChargeRow, ClientRow, PaymentRow, ProviderRow } from "../types.js";
-import { amountCentsSchema, isoDateSchema, mobileSchema, requiredText, validationMessage } from "../validation.js";
+import type { ChargeRow, ClientRow, PaymentRow } from "../types.js";
+import { isoDateSchema, validationMessage } from "../validation.js";
 
-const createChargeSchema = z.object({
-  client: z.object({
-    /** Reaproveita cliente existente (critério F2: não redigitar). */
-    id: z.string().uuid().optional(),
-    name: requiredText("Nome do cliente", 2, 80).optional(),
-    whatsapp: mobileSchema.optional(),
-  }),
-  description: requiredText("Serviço", 2, 120),
-  amountCents: amountCentsSchema,
-  dueDate: isoDateSchema,
+const createChargeSchema = chargeDraftSchema.extend({
   /** Duração do preenchimento no cliente, para medir a meta de 60s (F2). */
   fillMs: z.number().int().nonnegative().optional(),
   source: z.enum(["form", "assistant"]).default("form"),
@@ -70,44 +59,6 @@ function monthRange(month: string): { from: string; to: string } {
   return { from: `${month}-01`, to: next.toISOString().slice(0, 10) };
 }
 
-async function findOrCreateClient(
-  provider: ProviderRow,
-  input: z.infer<typeof createChargeSchema>["client"],
-): Promise<ClientRow> {
-  if (input.id) {
-    const existing = await queryOne<ClientRow>(
-      "SELECT * FROM clients WHERE id = ? AND provider_id = ?",
-      input.id,
-      provider.id,
-    );
-    if (existing) return existing;
-  }
-
-  if (!input.name || !input.whatsapp) {
-    throw Object.assign(new Error("Nome e WhatsApp do cliente são obrigatórios"), {
-      statusCode: 400,
-    });
-  }
-
-  const byPhone = await queryOne<ClientRow>(
-    "SELECT * FROM clients WHERE provider_id = ? AND whatsapp = ?",
-    provider.id,
-    input.whatsapp,
-  );
-  if (byPhone) return byPhone;
-
-  const id = newId();
-  await execute(
-    "INSERT INTO clients (id, provider_id, name, whatsapp, created_at) VALUES (?, ?, ?, ?, ?)",
-    id,
-    provider.id,
-    input.name,
-    input.whatsapp,
-    new Date().toISOString(),
-  );
-  return (await queryOne<ClientRow>("SELECT * FROM clients WHERE id = ?", id))!;
-}
-
 export async function chargeRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", requireProvider);
 
@@ -137,95 +88,19 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
     const body = parsed.data;
     const provider = req.provider!;
 
-    let client: ClientRow;
+    let created;
     try {
-      client = await findOrCreateClient(provider, body.client);
+      created = await withTransaction((tx) =>
+        createCharge(tx, provider, body, body.source, body.fillMs)
+      );
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode ?? 500;
-      if (status === 400) return reply.code(400).send({ error: (err as Error).message });
+      if (status === 400 || status === 422) {
+        return reply.code(status).send({ error: (err as Error).message });
+      }
       throw err;
     }
-
-    // BR Code é gerado uma vez e congelado na parcela: o valor e a chave não
-    // podem mudar depois que o link foi enviado ao cliente.
-    let brCode: string;
-    try {
-      brCode = generatePixBrCode({
-        key: provider.pix_key,
-        amount: body.amountCents / 100,
-        merchantName: provider.name,
-        merchantCity: provider.city ?? "BRASIL",
-      }).brCode;
-    } catch (err) {
-      req.log.error({ err }, "Pix BR Code generation failed");
-      return reply.code(422).send({
-        error: "Não foi possível gerar o Pix. Confira sua chave Pix e tente novamente.",
-      });
-    }
-
-    const now = new Date().toISOString();
-    const chargeId = newId();
-    const paymentId = newId();
-    const token = newPublicToken();
-
-    await withTransaction(async (tx) => {
-      await tx.execute(`
-        INSERT INTO charges (id, provider_id, client_id, description, amount_cents, due_date, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-        chargeId,
-        provider.id,
-        client.id,
-        body.description,
-        body.amountCents,
-        body.dueDate,
-        now,
-      );
-
-      // MVP: 1 parcela por cobrança. O schema já suporta N (seq).
-      await tx.execute(`
-        INSERT INTO payments (id, charge_id, seq, amount_cents, due_date, status, public_token, brcode, created_at)
-        VALUES (?, ?, 1, ?, ?, 'em_aberto', ?, ?, ?)
-      `, paymentId, chargeId, body.amountCents, body.dueDate, token, brCode, now);
-    });
-
-    await track({
-      type: "cobranca_criada",
-      providerId: provider.id,
-      chargeId,
-      paymentId,
-      metadata: {
-        fillMs: body.fillMs ?? null,
-        amountCents: body.amountCents,
-        source: body.source,
-      },
-    });
-
-    const message = chargeMessage({
-      clientName: client.name,
-      providerName: provider.name,
-      description: body.description,
-      amountCents: body.amountCents,
-      publicToken: token,
-    });
-
-    return reply.code(201).send({
-      charge: {
-        id: chargeId,
-        description: body.description,
-        amountCents: body.amountCents,
-        dueDate: body.dueDate,
-        client: { id: client.id, name: client.name, whatsapp: client.whatsapp },
-      },
-      payment: {
-        id: paymentId,
-        status: "em_aberto",
-        publicToken: token,
-        paymentUrl: paymentUrl(token),
-      },
-      // F4 — o prestador só toca e envia.
-      whatsapp: { message, deeplink: waMeLink(client.whatsapp, message) },
-    });
+    return reply.code(201).send(created);
   });
 
   /** F9 — painel "quem me deve". */

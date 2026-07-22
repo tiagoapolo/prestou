@@ -9,6 +9,14 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+function positiveIntegerEnv(name: string, fallback: number): number {
+  const value = Number(env(name, String(fallback)));
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`Variável de ambiente deve ser um inteiro positivo: ${name}`);
+  }
+  return value;
+}
+
 export const config = {
   port: Number(env("PORT", "3333")),
   publicWebUrl: env("PUBLIC_WEB_URL", "http://localhost:3000").replace(/\/$/, ""),
@@ -28,6 +36,14 @@ export const config = {
     // X-Hub-Signature-256 dos POSTs). Só exigidos quando o inbound está ativo.
     verifyToken: env("WHATSAPP_VERIFY_TOKEN"),
     appSecret: env("WHATSAPP_APP_SECRET"),
+    guardrail: {
+      perMinute: positiveIntegerEnv("WHATSAPP_RATE_LIMIT_PER_MINUTE", 10),
+      perDay: positiveIntegerEnv("WHATSAPP_DAILY_MESSAGE_LIMIT", 100),
+      maxMessageLength: positiveIntegerEnv("WHATSAPP_MAX_MESSAGE_LENGTH", 1_000),
+      globalDailyAiLimit: positiveIntegerEnv("WHATSAPP_GLOBAL_DAILY_AI_LIMIT", 5_000),
+      cooldownMinutes: positiveIntegerEnv("WHATSAPP_ABUSE_COOLDOWN_MINUTES", 30),
+      invalidStreakLimit: positiveIntegerEnv("WHATSAPP_INVALID_STREAK_LIMIT", 3),
+    },
   },
   supabase: {
     url: requiredEnv("SUPABASE_URL"),

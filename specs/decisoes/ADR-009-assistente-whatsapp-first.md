@@ -1,7 +1,7 @@
 ---
 title: "ADR-009 — Assistente do prestador no WhatsApp (WhatsApp-first)"
 created: 2026-07-22
-status: proposta
+status: aceita
 tags:
   - prestou
   - spec
@@ -265,3 +265,29 @@ armazenar texto integral nem dados identificáveis.
 - **LGPD**: registrar no consentimento que há assistente processando texto; nada
   de comprovante ou chave Pix ao modelo; logs só de intenção, resultado,
   latência e erro.
+
+## Estado implementado em 2026-07-22
+
+- Orquestrador agnóstico de canal compartilhado por Dashboard e WhatsApp.
+- Webhook GET/POST com verify token e assinatura HMAC da Meta.
+- Identidade por número vinculado e verificado, incluindo equivalência do nono
+  dígito brasileiro.
+- WABA de teste inscrita no app e fluxo bidirecional validado.
+- Token sem expiração de usuário do sistema com permissão mínima de mensagens.
+- Proposta de cobrança específica do canal, com expiração de 10 minutos,
+  cancelamento, lock transacional, uso único e idempotência.
+- Botões **Criar cobrança / Cancelar** e criação pelo mesmo serviço usado pelo
+  Dashboard, sem mudança no fluxo de criação HTTP existente.
+- Guardrail persistente antes da OpenAI: deduplicação, limites por prestador,
+  circuit breaker global, tamanho máximo, lease de concorrência, sequência de
+  pedidos inválidos e cooldown.
+- Dados do guardrail no schema `private`, sem texto integral e sem acesso por
+  `anon` ou `authenticated`.
+
+O desenho final manteve `whatsapp_charge_proposals` separado das propostas de
+ação do Dashboard. Essa escolha evitou generalizar o protocolo existente antes
+de haver uma segunda ação compartilhada; `marcar_pago_manual` pelo WhatsApp
+permanece fora do escopo implementado.
+
+O runbook operacional e a configuração vigente estão em
+[`docs/whatsapp-operacao.md`](../../docs/whatsapp-operacao.md).

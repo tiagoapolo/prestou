@@ -94,6 +94,7 @@ test("pedido_nao_suportado devolve o escopo", async () => {
   const result = await run({ name: "pedido_nao_suportado", arguments: {} });
   assert.equal(result.kind, "text");
   assert.match(result.message, /Ainda não sei fazer isso/);
+  assert.equal(result.kind === "text" ? result.classification : undefined, "unsupported");
 });
 
 test("preparar_cobranca reaproveita cliente existente", async () => {

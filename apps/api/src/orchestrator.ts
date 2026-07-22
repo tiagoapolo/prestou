@@ -23,7 +23,7 @@ export interface ChargeDraft {
 export type AssistantResult =
   | { kind: "draft"; message: string; draft: ChargeDraft }
   | { kind: "clarification"; message: string }
-  | { kind: "text"; message: string };
+  | { kind: "text"; message: string; classification?: "unsupported" };
 
 /** Cobrança em atraso, já resolvida e formatável pelo backend. */
 export interface OverdueCharge {
@@ -359,8 +359,16 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
     case "resumo_financeiro":
       return handleFinancialSummary(input);
     case "pedido_nao_suportado":
-      return { kind: "text", message: `Ainda não sei fazer isso. ${CAPABILITIES}` };
+      return {
+        kind: "text",
+        message: `Ainda não sei fazer isso. ${CAPABILITIES}`,
+        classification: "unsupported",
+      };
     default:
-      return { kind: "text", message: `Ainda não sei fazer isso. ${CAPABILITIES}` };
+      return {
+        kind: "text",
+        message: `Ainda não sei fazer isso. ${CAPABILITIES}`,
+        classification: "unsupported",
+      };
   }
 }

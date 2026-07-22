@@ -12,6 +12,7 @@
     "build": "pnpm -r --if-present build",
     "build:pix": "pnpm --filter @prestou/pix build",
     "test:pix": "pnpm --filter @prestou/pix test",
+    "test:whatsapp": "node --env-file-if-exists=apps/api/.env.local scripts/test-whatsapp.mjs",
     "dev:api": "pnpm --filter @prestou/api dev",
     "dev:web": "pnpm --filter @prestou/web dev",
     "typecheck": "pnpm -r --if-present typecheck",
