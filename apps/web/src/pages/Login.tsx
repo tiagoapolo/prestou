@@ -7,6 +7,20 @@ import { Label } from "@/components/ui/label";
 import { userMessage } from "../errors";
 import { Link } from "react-router-dom";
 
+function emailClient(email: string) {
+  const domain = email.split("@").at(-1)?.toLowerCase();
+
+  if (domain === "gmail.com" || domain === "googlemail.com") {
+    return { href: "https://mail.google.com/mail/u/0/#inbox", label: "Abrir Gmail", opensNewTab: true };
+  }
+
+  if (["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain ?? "")) {
+    return { href: "https://outlook.live.com/mail/0/inbox", label: "Abrir Outlook", opensNewTab: true };
+  }
+
+  return { href: "mailto:", label: "Abrir aplicativo de e-mail", opensNewTab: false };
+}
+
 export function LoginPage() {
   const { sendMagicLink, error: authError } = useAuth();
   const [email, setEmail] = useState("");
@@ -34,6 +48,8 @@ export function LoginPage() {
     }
   }
 
+  const client = emailClient(email);
+
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -41,10 +57,15 @@ export function LoginPage() {
         <p className="eyebrow">Seu Pix, sem perseguição</p>
         <h1>{sent ? "Confira seu e-mail" : "Entre no seu painel"}</h1>
         {sent ? (
-          <>
+          <div className="stack">
             <p>Enviamos um link seguro para <strong>{email}</strong>. Toque nele para entrar.</p>
+            <Button asChild>
+              <a href={client.href} target={client.opensNewTab ? "_blank" : undefined} rel={client.opensNewTab ? "noreferrer" : undefined}>
+                {client.label}
+              </a>
+            </Button>
             <Button variant="secondary" onClick={() => setSent(false)}>Usar outro e-mail</Button>
-          </>
+          </div>
         ) : (
           <form onSubmit={submit} className="stack">
             <Label>E-mail
