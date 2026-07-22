@@ -90,6 +90,54 @@ test("resumo_financeiro reporta os três números", async () => {
   assert.match(result.message, /2 cobranças atrasadas/);
 });
 
+test("cobranças em aberto usa a intenção escolhida pela IA", async () => {
+  let llmCalled = false;
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "me diga se tem alguma cobrança em aberto",
+    deps: deps({
+      financialSummary: async () => ({
+        aReceberCents: 8000,
+        recebidoMesCents: 0,
+        atrasadasCount: 0,
+      }),
+    }),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    llm: { interpret: async (request) => {
+      llmCalled = true;
+      assert.match(request.instructions, /cobranças em aberto/);
+      assert.match(
+        request.tools.find((tool) => tool.name === "resumo_financeiro")?.description ?? "",
+        /cobranças em aberto/,
+      );
+      return { name: "resumo_financeiro", arguments: {} };
+    } },
+  });
+  assert.equal(llmCalled, true);
+  assert.equal(result.kind, "text");
+  assert.match(result.message, /A receber: R\$\s?80,00/);
+});
+
+test("quem me deve usa a intenção escolhida pela IA", async () => {
+  let llmCalled = false;
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "quem me deve?",
+    deps: deps({
+      listOverdue: async () => [{ clientName: "João", amountCents: 8000, dueDate: "2026-07-20" }],
+    }),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    llm: { interpret: async () => {
+      llmCalled = true;
+      return { name: "listar_inadimplentes", arguments: {} };
+    } },
+  });
+  assert.equal(llmCalled, true);
+  assert.match(result.message, /João/);
+});
+
 test("pedido_nao_suportado devolve o escopo", async () => {
   const result = await run({ name: "pedido_nao_suportado", arguments: {} });
   assert.equal(result.kind, "text");

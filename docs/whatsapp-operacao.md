@@ -166,7 +166,8 @@ Proteções padrão:
 - lease de processamento maior que o timeout da OpenAI, com liberação no
   `finally` e expiração automática após queda do processo;
 - cooldown de 30 minutos após estouro de cota;
-- cooldown após três mensagens longas ou intenções não suportadas consecutivas;
+- cooldown após a quantidade configurada de mensagens longas ou intenções não
+  suportadas consecutivas (`WHATSAPP_INVALID_STREAK_LIMIT`, padrão 3);
 - uma mensagem válida zera a sequência de intenções inválidas;
 - botões passam por deduplicação e cotas, mas não consomem o orçamento da IA;
 - respostas de bloqueio são textos fixos e nunca chamam o modelo;

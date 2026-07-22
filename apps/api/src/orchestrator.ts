@@ -117,7 +117,7 @@ const readTools: LlmTool[] = [
   },
   {
     name: "resumo_financeiro",
-    description: "Resumo do mês: a receber, recebido e atrasadas. Sem argumentos.",
+    description: "Informa se há cobranças em aberto e resume a receber, recebido e atrasadas. Sem argumentos.",
     parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
   },
   {
@@ -138,7 +138,7 @@ function instructions(today: string): string {
     "Você é o assistente do prestador no Prestou. Escolha exatamente uma ferramenta.",
     `Hoje em America/Sao_Paulo é ${today}.`,
     "Para cobrar, use preparar_cobranca: converta reais em centavos inteiros e datas relativas para AAAA-MM-DD; use null para todo campo ausente e não invente nada.",
-    "Para 'quem me deve' / atrasados, use listar_inadimplentes. Para a situação de um cliente citado pelo nome, use status_cliente. Para 'quanto tenho a receber' / resumo do mês, use resumo_financeiro.",
+    "Para 'quem me deve' / atrasados, use listar_inadimplentes. Para a situação de um cliente citado pelo nome, use status_cliente. Para cobranças em aberto, pendências, 'quanto tenho a receber' ou resumo do mês, use resumo_financeiro.",
     "Se o pedido não se encaixar em nenhuma dessas, use pedido_nao_suportado.",
   ].join(" ");
 }
