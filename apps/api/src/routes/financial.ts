@@ -125,6 +125,7 @@ async function loadEntries(providerId: string, month: string): Promise<Financial
       JOIN clients cl ON cl.id = c.client_id
      WHERE c.provider_id = ?
        AND p.status = 'paga'
+       AND p.financial_voided_at IS NULL
        AND p.paid_at >= (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
        AND p.paid_at < (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
     UNION ALL
@@ -160,7 +161,10 @@ async function availableMonths(providerId: string, selectedMonth: string): Promi
         SELECT to_char(p.paid_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS month
           FROM payments p
           JOIN charges c ON c.id = p.charge_id
-         WHERE c.provider_id = ? AND p.status = 'paga' AND p.paid_at IS NOT NULL
+         WHERE c.provider_id = ?
+           AND p.status = 'paga'
+           AND p.financial_voided_at IS NULL
+           AND p.paid_at IS NOT NULL
         UNION
         SELECT to_char(mr.received_date, 'YYYY-MM') AS month
           FROM manual_receipts mr
@@ -204,7 +208,7 @@ async function recordEvent(
     providerId: string;
     sourceType: "payment" | "manual_receipt";
     sourceId: string;
-    action: "created" | "updated" | "voided" | "payment_reopened";
+    action: "created" | "updated" | "voided" | "payment_voided";
     before?: unknown;
     after?: unknown;
   },
@@ -235,6 +239,7 @@ function paymentSnapshot(payment: OwnedPayment) {
     paidVia: payment.paid_via,
     paymentMethod: payment.payment_method,
     note: payment.financial_note,
+    financialVoidedAt: payment.financial_voided_at,
   };
 }
 
@@ -506,7 +511,7 @@ export async function financialRoutes(app: FastifyInstance): Promise<void> {
       const providerId = req.provider!.id;
       const current = await loadOwnedPayment({ queryOne }, providerId, params.data.id);
       if (!current) return reply.code(404).send({ error: "Pagamento não encontrado" });
-      if (current.status !== "paga") {
+      if (current.status !== "paga" || current.financial_voided_at) {
         return reply.code(409).send({ error: "Somente pagamentos recebidos podem ser corrigidos" });
       }
       const input = parsed.data;
@@ -516,7 +521,7 @@ export async function financialRoutes(app: FastifyInstance): Promise<void> {
           UPDATE payments
              SET received_amount_cents = ?, payment_method = ?, financial_note = ?,
                  paid_at = (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
-           WHERE id = ? AND status = 'paga'
+           WHERE id = ? AND status = 'paga' AND financial_voided_at IS NULL
         `,
           input.amountCents,
           input.paymentMethod,
@@ -555,44 +560,38 @@ export async function financialRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post<{ Params: { id: string } }>(
-    "/api/financial/payments/:id/reopen",
+  app.delete<{ Params: { id: string } }>(
+    "/api/financial/payments/:id",
     async (req, reply) => {
       const params = entryParamsSchema.safeParse(req.params);
       if (!params.success) return reply.code(400).send({ error: "Identificador inválido" });
       const providerId = req.provider!.id;
       const current = await loadOwnedPayment({ queryOne }, providerId, params.data.id);
       if (!current) return reply.code(404).send({ error: "Pagamento não encontrado" });
-      if (current.status !== "paga") {
-        return reply.code(409).send({ error: "Esta cobrança não está marcada como paga" });
+      if (current.status !== "paga" || current.financial_voided_at) {
+        return reply.code(409).send({ error: "Este recebimento não está disponível no Financeiro" });
       }
-      const nextStatus = current.client_confirmed_at ? "cliente_confirmou" : "em_aberto";
 
       await withTransaction(async (tx) => {
         const result = await tx.execute(`
           UPDATE payments
-             SET status = ?, paid_at = NULL, paid_via = NULL,
-                 received_amount_cents = NULL, payment_method = NULL, financial_note = NULL
-           WHERE id = ? AND status = 'paga'
-        `, nextStatus, current.id);
+             SET financial_voided_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND status = 'paga' AND financial_voided_at IS NULL
+        `, current.id);
         if (result.changes !== 1) {
           throw Object.assign(new Error("Pagamento atualizado em outra sessão"), { statusCode: 409 });
         }
-        await tx.execute(`
-          INSERT INTO payment_transitions
-            (id, payment_id, from_status, to_status, actor, action, created_at)
-          VALUES (?, ?, 'paga', ?, 'provider', 'prestador_desfez_pagamento', CURRENT_TIMESTAMP)
-        `, newId(), current.id, nextStatus);
+        const next = (await loadOwnedPayment(tx, providerId, current.id))!;
         await recordEvent(tx, {
           providerId,
           sourceType: "payment",
           sourceId: current.id,
-          action: "payment_reopened",
+          action: "payment_voided",
           before: paymentSnapshot(current),
-          after: { status: nextStatus },
+          after: paymentSnapshot(next),
         });
       });
-      return { payment: { id: current.id, status: nextStatus } };
+      return reply.code(204).send();
     },
   );
 }

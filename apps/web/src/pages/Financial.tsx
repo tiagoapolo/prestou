@@ -184,14 +184,14 @@ export function FinancialPage() {
   async function removeEntry() {
     if (!selected) return;
     const message = selected.source === "payment"
-      ? "Desfazer este pagamento? A cobrança voltará a ficar pendente."
+      ? "Excluir este recebimento do Financeiro? Ele deixará de aparecer nos totais e no CSV, mas a cobrança continuará paga no histórico."
       : "Excluir esta receita avulsa do financeiro?";
     if (!window.confirm(message)) return;
     setBusy(true);
     setFormError("");
     try {
       if (selected.source === "payment") {
-        await api(`/api/financial/payments/${selected.sourceId}/reopen`, { method: "POST" });
+        await api(`/api/financial/payments/${selected.sourceId}`, { method: "DELETE" });
       } else {
         await api(`/api/financial/manual-receipts/${selected.sourceId}`, { method: "DELETE" });
       }
@@ -227,6 +227,7 @@ export function FinancialPage() {
   if (!data) return <div className="page"><ErrorNotice message={error} /></div>;
 
   return <div className="page financial-page">
+    <Link className="financial-back" to="/">← Voltar ao painel</Link>
     <div className="financial-heading">
       <div><p className="eyebrow">Seu caixa</p><h1>Financeiro</h1></div>
       <div className="financial-actions">
@@ -288,7 +289,7 @@ export function FinancialPage() {
           <Label>Observação <span className="optional">opcional</span><textarea maxLength={500} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Informação útil para o fechamento" /></Label>
         </div>
         {formError && <ErrorNotice message={formError} />}
-        {selected && <Button type="button" variant="destructive" disabled={busy} onClick={removeEntry}><TriangleAlert aria-hidden="true" />{selected.source === "payment" ? "Desfazer pagamento" : "Excluir receita"}</Button>}
+        {selected && <Button type="button" variant="destructive" disabled={busy} onClick={removeEntry}><TriangleAlert aria-hidden="true" />{selected.source === "payment" ? "Excluir do Financeiro" : "Excluir receita"}</Button>}
         <div className="action-dialog-actions"><Button type="button" variant="secondary" disabled={busy} onClick={closeDialog}>Cancelar</Button><Button disabled={busy} loading={busy} loadingLabel="Salvando…">Salvar</Button></div>
       </form>
     </dialog>

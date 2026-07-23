@@ -316,7 +316,7 @@ test("caso 4 do QA — proposta persiste parâmetros exatos e é executada uma v
   assert.equal(proposal.idempotencyKey, idempotencyKey);
   assert.match(proposal.summary, /R\$\s?150,07/);
   assert.match(proposal.summary, /Maria Cliente/);
-  assert.match(proposal.summary, /reaberto no Financeiro/i);
+  assert.match(proposal.summary, /excluído do Financeiro/i);
   assert.ok(new Date(proposal.expiresAt).getTime() > Date.now());
 
   const { queryOne } = await import("../src/db.ts");
@@ -803,7 +803,7 @@ test("financeiro registra, corrige, exporta e exclui receita avulsa sem cliente"
   assert.equal(Number(audit?.total), 3);
 });
 
-test("financeiro usa a data real, permite corrigir e reabrir um pagamento", async () => {
+test("financeiro usa a data real e exclui o recebimento sem reabrir a cobrança", async () => {
   const charge = await createCharge(15007, "2030-01-10");
   await app.inject({
     method: "POST",
@@ -843,25 +843,50 @@ test("financeiro usa a data real, permite corrigir e reabrir um pagamento", asyn
   assert.equal(item.receivedDate, "2042-05-12");
   assert.equal(item.paymentMethod, "transferencia");
 
-  const reopened = await app.inject({
-    method: "POST",
-    url: `/api/financial/payments/${charge.payment.id}/reopen`,
+  const removed = await app.inject({
+    method: "DELETE",
+    url: `/api/financial/payments/${charge.payment.id}`,
     headers: auth(),
   });
-  assert.equal(reopened.statusCode, 200);
-  assert.equal(reopened.json().payment.status, "cliente_confirmou");
+  assert.equal(removed.statusCode, 204);
 
-  const afterReopen = await app.inject({
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/charges/${charge.charge.id}`,
+    headers: auth(),
+  });
+  assert.equal(detail.json().status, "paga");
+
+  const afterRemoval = await app.inject({
     method: "GET",
     url: "/api/financial?month=2042-05",
     headers: auth(),
   });
   assert.equal(
-    afterReopen.json().items.some(
+    afterRemoval.json().items.some(
       (candidate: { sourceId: string }) => candidate.sourceId === charge.payment.id,
     ),
     false,
   );
+
+  const legacySummary = await app.inject({
+    method: "GET",
+    url: "/api/financial-summary?month=2030-01",
+    headers: auth(),
+  });
+  assert.equal(
+    legacySummary.json().items.some(
+      (candidate: { paymentId: string }) => candidate.paymentId === charge.payment.id,
+    ),
+    false,
+  );
+
+  const { queryOne } = await import("../src/db.ts");
+  const event = await queryOne<{ action: string }>(
+    "SELECT action FROM financial_entry_events WHERE source_id = ? ORDER BY created_at DESC LIMIT 1",
+    charge.payment.id,
+  );
+  assert.equal(event?.action, "payment_voided");
 });
 
 test("funil registra os eventos que decidem o PSP na V2", async () => {

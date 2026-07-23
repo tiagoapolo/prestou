@@ -172,7 +172,7 @@ export function ChargeDetailPage() {
           {pendingProposal?.summary}
         </p>
         <p className="action-dialog-warning">
-          Confira os dados com atenção. Depois, você poderá corrigir ou reabrir este pagamento no Financeiro.
+          Confira os dados com atenção. Depois, você poderá corrigir ou excluir este recebimento do Financeiro sem reabrir a cobrança.
         </p>
         {confirmationError && <ErrorNotice message={confirmationError} />}
         <div className="action-dialog-actions">

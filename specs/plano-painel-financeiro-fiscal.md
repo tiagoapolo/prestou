@@ -39,7 +39,8 @@ Decisões registradas em 2026-07-23:
 - formas de pagamento: Pix, dinheiro, cartão, transferência e outro;
 - pagamentos parciais ficam fora da Fase 1;
 - data, valor, forma de pagamento e observação podem ser corrigidos com auditoria;
-- um pagamento pode ser desfeito, reabrindo a cobrança sem apagar o histórico;
+- um recebimento pode ser removido por soft delete financeiro, sem reabrir ou
+  alterar o status da cobrança e sem apagar o histórico;
 - despesas ficam fora da Fase 1;
 - os números principais são recebido no mês, comparação com mês anterior, a
   receber e em atraso;
@@ -206,12 +207,13 @@ Implementação entregue:
 - lista rastreável de todos os registros que compõem o total;
 - cadastro, edição e exclusão lógica de receita avulsa com cliente opcional;
 - correção de valor recebido, data, forma de pagamento e observação;
-- reabertura de cobrança marcada como paga;
-- trilha de auditoria para criação, correção, exclusão e reabertura;
+- soft delete de recebimento sem alterar a cobrança paga;
+- trilha de auditoria para criação, correção e exclusão;
 - CSV autenticado com as colunas acordadas e proteção contra fórmulas em células;
 - totais “Recebido” do Dashboard e do assistente corrigidos para caixa e
   complementados por receitas avulsas;
-- migração `20260723190849_financial_phase_one.sql`.
+- migrações `20260723190849_financial_phase_one.sql` e
+  `20260723193113_payment_financial_soft_delete.sql`.
 
 Não implementado nesta fase:
 

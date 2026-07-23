@@ -77,6 +77,7 @@ export const dbDeps: AssistantDeps = {
          COALESCE(SUM(CASE WHEN p.status <> 'paga' THEN p.amount_cents ELSE 0 END), 0) AS a_receber_cents,
          COALESCE(SUM(CASE
            WHEN p.status = 'paga'
+            AND p.financial_voided_at IS NULL
             AND p.paid_at >= (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
             AND p.paid_at < (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
            THEN COALESCE(p.received_amount_cents, p.amount_cents)

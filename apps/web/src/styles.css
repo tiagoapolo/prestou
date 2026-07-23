@@ -82,6 +82,7 @@ h1 { font-size: clamp(1.75rem, 7vw, 2.5rem); line-height: 1.05; letter-spacing: 
 .settings-page { max-width:560px; }.settings-page>.form-card+.form-card { margin-top:14px; }.settings-help { color:var(--muted); line-height:1.55; margin-top:-8px; }.notice.success { background:#ddf0df; color:#2d7141; }
 .whatsapp-link-card { display:grid; gap:16px; }.whatsapp-link-card .loading { min-height:100px; }.settings-section-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.settings-section-heading h2 { margin:0; font-size:1.2rem; }.settings-section-heading .eyebrow { margin-bottom:4px; }.whatsapp-link-status { flex:none; padding:4px 8px; border-radius:999px; background:#eceeea; color:#68716c; font-size:.7rem; font-weight:700; }.whatsapp-link-status.verified { background:#ddf0df; color:#2d7141; }.whatsapp-link-status.pending { background:#fff0b9; color:#765900; }.verification-code-form { padding-top:16px; border-top:1px solid var(--line); }
 .financial-page { padding-bottom:70px; }
+.financial-back { display:inline-block; margin-bottom:16px; color:var(--green); font-size:.84rem; font-weight:700; }
 .financial-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
 .financial-actions { display:flex; gap:8px; }
 .financial-actions svg,.financial-entry-value svg { width:17px; height:17px; }

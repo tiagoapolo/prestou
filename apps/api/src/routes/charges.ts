@@ -208,6 +208,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
          COALESCE(SUM(CASE WHEN p.status <> 'paga' THEN p.amount_cents ELSE 0 END), 0) AS a_receber_cents,
          COALESCE(SUM(CASE
            WHEN p.status = 'paga'
+            AND p.financial_voided_at IS NULL
             AND p.paid_at >= (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
             AND p.paid_at < (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
            THEN COALESCE(p.received_amount_cents, p.amount_cents)
@@ -265,7 +266,9 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
       `SELECT COUNT(*) AS total
          FROM payments p
          JOIN charges c ON c.id = p.charge_id
-        WHERE c.provider_id = ? AND p.due_date >= ? AND p.due_date < ?`,
+        WHERE c.provider_id = ?
+          AND p.financial_voided_at IS NULL
+          AND p.due_date >= ? AND p.due_date < ?`,
       ...params,
     );
     const total = Number(totalRow?.total ?? 0);
@@ -275,7 +278,9 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
          FROM payments p
          JOIN charges c ON c.id = p.charge_id
          JOIN clients cl ON cl.id = c.client_id
-        WHERE c.provider_id = ? AND p.due_date >= ? AND p.due_date < ?
+        WHERE c.provider_id = ?
+          AND p.financial_voided_at IS NULL
+          AND p.due_date >= ? AND p.due_date < ?
         ORDER BY p.due_date DESC, p.created_at DESC, p.id DESC
         LIMIT ? OFFSET ?`,
       ...params,
@@ -295,7 +300,9 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
          COALESCE(SUM(CASE WHEN p.status = 'em_aberto' AND p.due_date < ? THEN p.amount_cents ELSE 0 END), 0) AS overdue_cents
        FROM payments p
        JOIN charges c ON c.id = p.charge_id
-      WHERE c.provider_id = ? AND p.due_date >= ? AND p.due_date < ?`,
+      WHERE c.provider_id = ?
+        AND p.financial_voided_at IS NULL
+        AND p.due_date >= ? AND p.due_date < ?`,
       todayISO(),
       ...params,
     );

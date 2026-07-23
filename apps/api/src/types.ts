@@ -58,5 +58,6 @@ export interface PaymentRow {
   received_amount_cents: number | null;
   payment_method: PaymentMethod | null;
   financial_note: string | null;
+  financial_voided_at: string | null;
   created_at: string;
 }

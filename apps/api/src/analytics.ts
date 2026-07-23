@@ -76,7 +76,7 @@ export async function funnel(providerId?: string): Promise<{
     `SELECT AVG(EXTRACT(EPOCH FROM (p.paid_at - p.created_at)) / 3600.0) AS horas
        FROM payments p
        JOIN charges c ON c.id = p.charge_id
-      WHERE p.paid_at IS NOT NULL
+      WHERE p.paid_at IS NOT NULL AND p.financial_voided_at IS NULL
         ${providerId ? "AND c.provider_id = ?" : ""}`,
     ...params,
   );

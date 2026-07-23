@@ -41,7 +41,9 @@ Esta visão é separada do resumo de carteira por vencimento existente em
 - `received_amount_cents`: valor efetivamente recebido, sem alterar o valor
   originalmente cobrado;
 - `payment_method`: forma de pagamento;
-- `financial_note`: observação opcional de até 500 caracteres.
+- `financial_note`: observação opcional de até 500 caracteres;
+- `financial_voided_at`: soft delete exclusivamente financeiro. Não altera o
+  status da cobrança.
 
 Pagamentos existentes no estado `paga` são migrados com o valor original e
 forma `pix`. Consultas mantêm fallback para esses valores.
@@ -54,7 +56,7 @@ quando informado, deve pertencer ao mesmo prestador. Exclusão é lógica por
 
 ### `financial_entry_events`
 
-Registra criação, correção, exclusão lógica e reabertura. A auditoria de
+Registra criação, correção e exclusão lógica. A auditoria de
 pagamentos guarda somente campos financeiros e não replica token público ou BR
 Code.
 
@@ -160,17 +162,22 @@ Content-Type: application/json
 Somente pagamentos em estado `paga` podem ser corrigidos. A correção não altera
 o valor original da cobrança.
 
-## Desfazer pagamento
+## Excluir recebimento do Financeiro
 
 ```http
-POST /api/financial/payments/:id/reopen
+DELETE /api/financial/payments/:id
 ```
 
-- se havia confirmação do cliente, volta para `cliente_confirmou` e preserva
-  confirmação e comprovante;
-- caso contrário, volta para `em_aberto`;
-- campos financeiros do recebimento são limpos;
-- a transição e o evento financeiro são registrados.
+- preenche `financial_voided_at` sem alterar `payments.status`;
+- a cobrança continua `paga` no histórico operacional;
+- o recebimento deixa de aparecer em listas, totais, comparação mensal,
+  assistente, resumo financeiro e CSV;
+- valores e datas originais são preservados para auditoria;
+- um evento `payment_voided` é registrado.
+
+A migração corretiva também identifica registros `payment_reopened` produzidos
+pela implementação anterior, restaura essas cobranças para `paga` e aplica o
+soft delete financeiro.
 
 ## Exportar CSV
 
@@ -195,13 +202,15 @@ de fórmulas ao abrir o CSV em uma planilha.
 ## Experiência web
 
 - rota autenticada `/financeiro`;
+- link explícito para voltar ao painel principal;
 - opção fixa “Financeiro” no cabeçalho;
 - seleção de qualquer mês com registros;
 - recebido no mês e comparação com o mês anterior;
 - a receber e em atraso como carteira atual;
 - lista rastreável com acesso à cobrança de origem;
 - formulário de receita avulsa com cliente opcional;
-- edição e reabertura dentro do painel;
+- edição e ação “Excluir do Financeiro”, explicando que o recebimento sai dos
+  cálculos sem reabrir a cobrança;
 - estado vazio que explica como completar o mês;
 - download do CSV.
 
@@ -217,7 +226,8 @@ pelo WhatsApp, não fazem parte desta fase e aguardam validação da tela web.
 - cada centavo de `receivedCents` corresponde a um item da lista;
 - correção de data move o registro para o mês correto;
 - receita sem cliente pode ser registrada;
-- reabertura remove o pagamento do caixa sem apagar o histórico;
+- soft delete remove o recebimento de todos os cálculos sem reabrir a cobrança
+  nem apagar o histórico;
 - totais e CSV usam a mesma fonte de registros;
 - dados não atravessam a fronteira do prestador autenticado;
 - datas consideram `America/Sao_Paulo`.
