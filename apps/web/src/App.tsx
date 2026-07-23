@@ -9,6 +9,7 @@ import { OnboardingPage } from "./pages/Onboarding";
 import { PublicPaymentPage } from "./pages/PublicPayment";
 import { SettingsPage } from "./pages/Settings";
 import { PrivacyPage } from "./pages/Privacy";
+import { FinancialPage } from "./pages/Financial";
 
 function PrivateApp() {
   const auth = useAuth();
@@ -20,6 +21,7 @@ function PrivateApp() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
+        <Route path="financeiro" element={<FinancialPage />} />
         <Route path="nova" element={<NewChargePage />} />
         <Route path="cobranca/:id" element={<ChargeDetailPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />

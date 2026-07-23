@@ -1,5 +1,6 @@
 export type PaymentStatus = "em_aberto" | "cliente_confirmou" | "paga" | "atrasada";
 export type DefaultDueDays = 0 | 1 | 5 | 15 | 30;
+export type PaymentMethod = "pix" | "dinheiro" | "cartao" | "transferencia" | "outro";
 
 export interface Provider {
   id: string;
@@ -51,4 +52,28 @@ export interface PublicPayment {
   status: string;
   brCode: string;
   alreadyConfirmed: boolean;
+}
+
+export interface FinancialEntry {
+  source: "payment" | "manual_receipt";
+  sourceId: string;
+  chargeId: string | null;
+  description: string;
+  amountCents: number;
+  receivedDate: string;
+  paymentMethod: PaymentMethod;
+  note: string | null;
+  client: { id: string; name: string } | null;
+}
+
+export interface FinancialData {
+  month: string;
+  availableMonths: string[];
+  items: FinancialEntry[];
+  summary: {
+    receivedCents: number;
+    previousMonthReceivedCents: number;
+    pendingCents: number;
+    overdueCents: number;
+  };
 }

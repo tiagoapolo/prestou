@@ -21,6 +21,45 @@ export interface NotifyInput {
   template?: string;
   /** Parâmetros posicionais do template ({{1}}, {{2}}, ...). */
   templateParams?: string[];
+  /** Sufixo dinâmico do primeiro botão de URL do template. */
+  templateUrlButtonParam?: string;
+}
+
+export function buildWhatsAppTemplatePayload(input: {
+  to: string;
+  name: string;
+  language: string;
+  bodyParams?: string[];
+  urlButtonParam?: string;
+}) {
+  const components = [];
+
+  if (input.bodyParams?.length) {
+    components.push({
+      type: "body",
+      parameters: input.bodyParams.map((text) => ({ type: "text", text })),
+    });
+  }
+
+  if (input.urlButtonParam) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [{ type: "text", text: input.urlButtonParam }],
+    });
+  }
+
+  return {
+    messaging_product: "whatsapp",
+    to: input.to,
+    type: "template",
+    template: {
+      name: input.name,
+      language: { code: input.language },
+      components: components.length ? components : undefined,
+    },
+  };
 }
 
 /**
@@ -88,26 +127,13 @@ async function sendViaCloudApi(input: NotifyInput): Promise<void> {
   const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
 
   const payload = input.template
-    ? {
-        messaging_product: "whatsapp",
+    ? buildWhatsAppTemplatePayload({
         to,
-        type: "template",
-        template: {
-          name: input.template,
-          language: { code: templateLang },
-          components: input.templateParams?.length
-            ? [
-                {
-                  type: "body",
-                  parameters: input.templateParams.map((text) => ({
-                    type: "text",
-                    text,
-                  })),
-                },
-              ]
-            : undefined,
-        },
-      }
+        name: input.template,
+        language: templateLang,
+        bodyParams: input.templateParams,
+        urlButtonParam: input.templateUrlButtonParam,
+      })
     : { messaging_product: "whatsapp", to, type: "text", text: { body: input.body } };
 
   const res = await fetch(url, {

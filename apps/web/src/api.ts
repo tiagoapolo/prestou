@@ -101,6 +101,25 @@ export async function authenticatedFileUrl(path: string): Promise<string> {
   return payload.url;
 }
 
+export async function authenticatedBlob(path: string): Promise<Blob> {
+  const token = await accessToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  let response: Response;
+  try {
+    response = await fetch(`${env.apiUrl}${path}`, { headers });
+  } catch (error) {
+    console.error("API connection failed", error);
+    throw new ApiError(NETWORK_ERROR, 0, "NETWORK_ERROR");
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as ErrorPayload;
+    throw responseError(response, payload);
+  }
+  return response.blob();
+}
+
 export async function publicApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   return request<T>(path, init, false);
 }

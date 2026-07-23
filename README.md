@@ -200,6 +200,17 @@ Templates esperados:
 - `pagamento_confirmado_cliente`;
 - `lembrete_cobranca_prestador`.
 
+O template `pagamento_confirmado_cliente` deve ser cadastrado como **Utilidade**,
+em `pt_BR`, com esta estrutura:
+
+- cabeçalho: `Pagamento informado`;
+- corpo: `Seu cliente *{{1}}* informou que pagou *{{2}}*, referente a {{3}}. Confira os detalhes e o comprovante.`;
+- botão de URL dinâmica: `Verifique o comprovante`, apontando para
+  `https://SEU_SITE/cobranca/{{1}}`.
+
+No envio, a API preenche o corpo com nome do cliente, valor e serviço, e envia
+o identificador da cobrança separadamente como sufixo do botão de URL.
+
 Enquanto os templates definitivos não estiverem aprovados, valide o envio com
 o template de teste da Meta. O destinatário deve estar autorizado na seção de
 configuração da API do WhatsApp:

@@ -316,7 +316,7 @@ test("caso 4 do QA — proposta persiste parâmetros exatos e é executada uma v
   assert.equal(proposal.idempotencyKey, idempotencyKey);
   assert.match(proposal.summary, /R\$\s?150,07/);
   assert.match(proposal.summary, /Maria Cliente/);
-  assert.match(proposal.summary, /não pode ser desfeita/i);
+  assert.match(proposal.summary, /reaberto no Financeiro/i);
   assert.ok(new Date(proposal.expiresAt).getTime() > Date.now());
 
   const { queryOne } = await import("../src/db.ts");
@@ -720,6 +720,148 @@ test("resumo financeiro seleciona o mês e pagina suas cobranças", async () => 
     headers: auth(),
   });
   assert.equal(invalidMonth.statusCode, 400);
+});
+
+test("financeiro registra, corrige, exporta e exclui receita avulsa sem cliente", async () => {
+  const created = await app.inject({
+    method: "POST",
+    url: "/api/financial/manual-receipts",
+    headers: auth(),
+    payload: {
+      clientId: null,
+      description: "Serviço recebido por fora",
+      amountCents: 12345,
+      receivedDate: "2042-03-10",
+      paymentMethod: "dinheiro",
+      note: "Acertado no local",
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const entry = created.json().entry;
+  assert.equal(entry.client, null);
+
+  const march = await app.inject({
+    method: "GET",
+    url: "/api/financial?month=2042-03",
+    headers: auth(),
+  });
+  assert.equal(march.statusCode, 200);
+  assert.equal(march.json().summary.receivedCents, 12345);
+  assert.ok(march.json().availableMonths.includes("2042-03"));
+
+  const exported = await app.inject({
+    method: "GET",
+    url: "/api/financial/export.csv?month=2042-03",
+    headers: auth(),
+  });
+  assert.equal(exported.statusCode, 200);
+  assert.match(exported.headers["content-type"] as string, /text\/csv/);
+  assert.match(exported.body, /Data do recebimento/);
+  assert.match(exported.body, /Serviço recebido por fora/);
+  assert.match(exported.body, /123,45/);
+
+  const updated = await app.inject({
+    method: "PATCH",
+    url: `/api/financial/manual-receipts/${entry.sourceId}`,
+    headers: auth(),
+    payload: {
+      clientId: null,
+      description: "Serviço corrigido",
+      amountCents: 12500,
+      receivedDate: "2042-04-02",
+      paymentMethod: "pix",
+      note: "Data corrigida",
+    },
+  });
+  assert.equal(updated.statusCode, 200);
+
+  const april = await app.inject({
+    method: "GET",
+    url: "/api/financial?month=2042-04",
+    headers: auth(),
+  });
+  assert.equal(april.json().summary.receivedCents, 12500);
+
+  const removed = await app.inject({
+    method: "DELETE",
+    url: `/api/financial/manual-receipts/${entry.sourceId}`,
+    headers: auth(),
+  });
+  assert.equal(removed.statusCode, 204);
+  const afterRemoval = await app.inject({
+    method: "GET",
+    url: "/api/financial?month=2042-04",
+    headers: auth(),
+  });
+  assert.equal(afterRemoval.json().summary.receivedCents, 0);
+
+  const { queryOne } = await import("../src/db.ts");
+  const audit = await queryOne<{ total: number | string }>(
+    "SELECT COUNT(*) AS total FROM financial_entry_events WHERE source_id = ?",
+    entry.sourceId,
+  );
+  assert.equal(Number(audit?.total), 3);
+});
+
+test("financeiro usa a data real, permite corrigir e reabrir um pagamento", async () => {
+  const charge = await createCharge(15007, "2030-01-10");
+  await app.inject({
+    method: "POST",
+    url: `/public/pay/${charge.payment.publicToken}/confirm`,
+    payload: {},
+  });
+  const confirmed = await app.inject({
+    method: "POST",
+    url: `/api/payments/${charge.payment.id}/confirm`,
+    headers: auth(),
+  });
+  assert.equal(confirmed.statusCode, 200);
+
+  const corrected = await app.inject({
+    method: "PATCH",
+    url: `/api/financial/payments/${charge.payment.id}`,
+    headers: auth(),
+    payload: {
+      amountCents: 15100,
+      receivedDate: "2042-05-12",
+      paymentMethod: "transferencia",
+      note: "Valor corrigido",
+    },
+  });
+  assert.equal(corrected.statusCode, 200);
+
+  const may = await app.inject({
+    method: "GET",
+    url: "/api/financial?month=2042-05",
+    headers: auth(),
+  });
+  const item = may.json().items.find(
+    (candidate: { sourceId: string }) => candidate.sourceId === charge.payment.id,
+  );
+  assert.ok(item);
+  assert.equal(item.amountCents, 15100);
+  assert.equal(item.receivedDate, "2042-05-12");
+  assert.equal(item.paymentMethod, "transferencia");
+
+  const reopened = await app.inject({
+    method: "POST",
+    url: `/api/financial/payments/${charge.payment.id}/reopen`,
+    headers: auth(),
+  });
+  assert.equal(reopened.statusCode, 200);
+  assert.equal(reopened.json().payment.status, "cliente_confirmou");
+
+  const afterReopen = await app.inject({
+    method: "GET",
+    url: "/api/financial?month=2042-05",
+    headers: auth(),
+  });
+  assert.equal(
+    afterReopen.json().items.some(
+      (candidate: { sourceId: string }) => candidate.sourceId === charge.payment.id,
+    ),
+    false,
+  );
 });
 
 test("funil registra os eventos que decidem o PSP na V2", async () => {

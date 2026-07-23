@@ -196,7 +196,7 @@ export async function actionProposalRoutes(app: FastifyInstance): Promise<void> 
     }
 
     const id = newId();
-    const summary = `Marcar definitivamente como paga a cobrança de ${formatBRL(payment.amount_cents)} de ${payment.client_name}, referente a ${payment.description}? Esta ação não pode ser desfeita.`;
+    const summary = `Marcar como paga a cobrança de ${formatBRL(payment.amount_cents)} de ${payment.client_name}, referente a ${payment.description}? O pagamento poderá ser corrigido ou reaberto no Financeiro.`;
     const result = await withTransaction(async (tx) => {
       const inserted = await tx.execute(`
         INSERT INTO assistant_action_proposals

@@ -4,6 +4,7 @@ export type PaymentStatus = "em_aberto" | "cliente_confirmou" | "paga";
 export type DerivedStatus = PaymentStatus | "atrasada";
 
 export type DefaultDueDays = 0 | 1 | 5 | 15 | 30;
+export type PaymentMethod = "pix" | "dinheiro" | "cartao" | "transferencia" | "outro";
 
 export interface ProviderRow {
   id: string;
@@ -54,5 +55,8 @@ export interface PaymentRow {
   comprovante_path: string | null;
   paid_at: string | null;
   paid_via: string | null;
+  received_amount_cents: number | null;
+  payment_method: PaymentMethod | null;
+  financial_note: string | null;
   created_at: string;
 }

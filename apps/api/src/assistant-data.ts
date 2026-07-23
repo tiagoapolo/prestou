@@ -75,11 +75,28 @@ export const dbDeps: AssistantDeps = {
     }>(
       `SELECT
          COALESCE(SUM(CASE WHEN p.status <> 'paga' THEN p.amount_cents ELSE 0 END), 0) AS a_receber_cents,
-         COALESCE(SUM(CASE WHEN p.status = 'paga' AND p.due_date >= ? AND p.due_date < ? THEN p.amount_cents ELSE 0 END), 0) AS recebido_mes_cents,
+         COALESCE(SUM(CASE
+           WHEN p.status = 'paga'
+            AND p.paid_at >= (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
+            AND p.paid_at < (?::date::timestamp AT TIME ZONE 'America/Sao_Paulo')
+           THEN COALESCE(p.received_amount_cents, p.amount_cents)
+           ELSE 0
+         END), 0)
+         + COALESCE((
+           SELECT SUM(mr.amount_cents)
+             FROM manual_receipts mr
+            WHERE mr.provider_id = ?
+              AND mr.voided_at IS NULL
+              AND mr.received_date >= ?
+              AND mr.received_date < ?
+         ), 0) AS recebido_mes_cents,
          COUNT(*) FILTER (WHERE p.status = 'em_aberto' AND p.due_date < ?) AS atrasadas_count
        FROM payments p
        JOIN charges c ON c.id = p.charge_id
       WHERE c.provider_id = ?`,
+      month.from,
+      month.to,
+      providerId,
       month.from,
       month.to,
       today,

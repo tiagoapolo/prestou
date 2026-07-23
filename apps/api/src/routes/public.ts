@@ -199,8 +199,8 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
             ctx.client.name,
             formatBRL(updated.amount_cents),
             ctx.charge.description,
-            `${config.publicWebUrl}/cobranca/${ctx.charge.id}`,
           ],
+          templateUrlButtonParam: ctx.charge.id,
         });
 
         return { ok: true, status: updated.status };

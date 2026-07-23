@@ -1,8 +1,8 @@
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { userMessage } from "./errors";
-import { LoaderCircle, Settings } from "lucide-react";
+import { LoaderCircle, Settings, WalletCards } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
@@ -52,6 +52,7 @@ export function AppShell() {
       <header className="topbar">
         <Link to="/" className="brand">prestou<span>.</span></Link>
         <div className="topbar-actions">
+          <Button asChild variant="ghost" size="sm"><NavLink to="/financeiro" className={({ isActive }) => `topbar-nav${isActive ? " active" : ""}`}><WalletCards aria-hidden="true" />Financeiro</NavLink></Button>
           <Button asChild variant="ghost" size="sm"><Link to="/configuracoes"><Settings aria-hidden="true" />Configurações</Link></Button>
           <Button variant="ghost" size="sm" loading={signingOut} loadingLabel="Saindo…" onClick={handleSignOut} aria-label="Sair">Sair</Button>
         </div>

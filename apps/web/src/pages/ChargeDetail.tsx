@@ -164,7 +164,7 @@ export function ChargeDetailPage() {
         <div className="action-dialog-heading">
           <span className="action-dialog-icon"><TriangleAlert aria-hidden="true" /></span>
           <div>
-            <p className="eyebrow">Ação definitiva</p>
+            <p className="eyebrow">Confirmar recebimento</p>
             <h2 id="manual-payment-title">Confirmar pagamento manual</h2>
           </div>
         </div>
@@ -172,7 +172,7 @@ export function ChargeDetailPage() {
           {pendingProposal?.summary}
         </p>
         <p className="action-dialog-warning">
-          Confira os dados com atenção. Depois de marcada como paga, esta cobrança não poderá ser reaberta.
+          Confira os dados com atenção. Depois, você poderá corrigir ou reabrir este pagamento no Financeiro.
         </p>
         {confirmationError && <ErrorNotice message={confirmationError} />}
         <div className="action-dialog-actions">

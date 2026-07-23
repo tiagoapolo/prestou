@@ -10,6 +10,12 @@ tags:
 
 # API — Cobranças, clientes e resumo financeiro
 
+> **Nota após a Fase 1 do Financeiro:** o endpoint
+> `GET /api/financial-summary` desta spec continua representando a carteira de
+> cobranças pelo vencimento. A visão de caixa por data efetiva do recebimento,
+> receitas avulsas, correções e CSV está documentada em
+> [`api-financeiro-caixa.md`](./api-financeiro-caixa.md).
+
 ## Regras comuns
 
 - Todos os endpoints desta especificação exigem `Authorization: Bearer <access_token>`.

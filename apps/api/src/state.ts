@@ -64,6 +64,12 @@ export async function transition(
       : patch?.comprovante_path ?? payment.comprovante_path,
     paid_at: patch?.paid_at ?? (to === "paga" ? now : payment.paid_at),
     paid_via: patch?.paid_via ?? payment.paid_via,
+    received_amount_cents: to === "paga"
+      ? payment.received_amount_cents ?? payment.amount_cents
+      : payment.received_amount_cents,
+    payment_method: to === "paga"
+      ? payment.payment_method ?? "pix"
+      : payment.payment_method,
   };
 
   const apply = async (tx: DatabaseClient) => {
@@ -73,7 +79,9 @@ export async function transition(
            client_confirmed_at = ?,
            comprovante_path = ?,
            paid_at = ?,
-           paid_via = ?
+           paid_via = ?,
+           received_amount_cents = ?,
+           payment_method = ?
      WHERE id = ? AND status = ?
   `,
       to,
@@ -81,6 +89,8 @@ export async function transition(
       next.comprovante_path,
       next.paid_at,
       next.paid_via,
+      next.received_amount_cents,
+      next.payment_method,
       payment.id,
       from,
     );
