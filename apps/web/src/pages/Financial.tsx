@@ -85,6 +85,7 @@ export function FinancialPage() {
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
 
   async function load(selectedMonth = month) {
@@ -106,6 +107,7 @@ export function FinancialPage() {
   function openNewReceipt() {
     const today = saoPauloToday();
     setSelected(null);
+    setConfirmingRemoval(false);
     setDraft({
       ...emptyDraft(),
       receivedDate: month === today.slice(0, 7) ? today : `${month}-01`,
@@ -116,6 +118,7 @@ export function FinancialPage() {
 
   function openEntry(entry: FinancialEntry) {
     setSelected(entry);
+    setConfirmingRemoval(false);
     setDraft({
       clientId: entry.client?.id ?? "",
       description: entry.description,
@@ -132,6 +135,7 @@ export function FinancialPage() {
     if (busy) return;
     dialog.current?.close();
     setSelected(null);
+    setConfirmingRemoval(false);
     setFormError("");
   }
 
@@ -181,12 +185,13 @@ export function FinancialPage() {
     }
   }
 
+  function requestRemoval() {
+    setFormError("");
+    setConfirmingRemoval(true);
+  }
+
   async function removeEntry() {
     if (!selected) return;
-    const message = selected.source === "payment"
-      ? "Excluir este recebimento do Financeiro? Ele deixará de aparecer nos totais e no CSV, mas a cobrança continuará paga no histórico."
-      : "Excluir esta receita avulsa do financeiro?";
-    if (!window.confirm(message)) return;
     setBusy(true);
     setFormError("");
     try {
@@ -197,9 +202,10 @@ export function FinancialPage() {
       }
       dialog.current?.close();
       setSelected(null);
+      setConfirmingRemoval(false);
       await load(month);
     } catch (cause) {
-      setFormError(userMessage(cause, "Não foi possível desfazer este recebimento."));
+      setFormError(userMessage(cause, "Não foi possível excluir este recebimento."));
     } finally {
       setBusy(false);
     }
@@ -270,8 +276,26 @@ export function FinancialPage() {
         </Card>)}
     </section>
 
-    <dialog ref={dialog} className="action-dialog financial-dialog" onCancel={(event) => { event.preventDefault(); closeDialog(); }}>
-      <form className="action-dialog-content" onSubmit={save}>
+    <dialog ref={dialog} className="action-dialog financial-dialog" onCancel={(event) => {
+      event.preventDefault();
+      if (confirmingRemoval) setConfirmingRemoval(false);
+      else closeDialog();
+    }}>
+      {confirmingRemoval && selected ? <div className="action-dialog-content">
+        <div className="action-dialog-heading">
+          <span className="action-dialog-icon"><TriangleAlert aria-hidden="true" /></span>
+          <div><p className="eyebrow">Confirmar exclusão</p><h2>Excluir do Financeiro?</h2></div>
+        </div>
+        <p className="action-dialog-summary">{selected.client?.name ?? "Sem cliente"} · {selected.description} · {brl(selected.amountCents)}</p>
+        <p className="action-dialog-warning">{selected.source === "payment"
+          ? "O recebimento deixará de aparecer nos totais e no CSV. A cobrança continuará paga no histórico."
+          : "A receita deixará de aparecer nos totais e no CSV. O registro será preservado para auditoria."}</p>
+        {formError && <ErrorNotice message={formError} />}
+        <div className="action-dialog-actions">
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => setConfirmingRemoval(false)}>Voltar</Button>
+          <Button type="button" variant="destructive" disabled={busy} loading={busy} loadingLabel="Excluindo…" onClick={removeEntry}>Sim, excluir</Button>
+        </div>
+      </div> : <form className="action-dialog-content" onSubmit={save}>
         <div className="action-dialog-heading">
           <span className="action-dialog-icon financial-icon">{selected ? <Pencil aria-hidden="true" /> : <Plus aria-hidden="true" />}</span>
           <div><p className="eyebrow">{selected ? "Corrigir registro" : "Recebimento por fora"}</p><h2>{selected ? "Editar recebimento" : "Adicionar receita"}</h2></div>
@@ -289,9 +313,9 @@ export function FinancialPage() {
           <Label>Observação <span className="optional">opcional</span><textarea maxLength={500} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Informação útil para o fechamento" /></Label>
         </div>
         {formError && <ErrorNotice message={formError} />}
-        {selected && <Button type="button" variant="destructive" disabled={busy} onClick={removeEntry}><TriangleAlert aria-hidden="true" />{selected.source === "payment" ? "Excluir do Financeiro" : "Excluir receita"}</Button>}
+        {selected && <Button type="button" variant="destructive" disabled={busy} onClick={requestRemoval}><TriangleAlert aria-hidden="true" />{selected.source === "payment" ? "Excluir do Financeiro" : "Excluir receita"}</Button>}
         <div className="action-dialog-actions"><Button type="button" variant="secondary" disabled={busy} onClick={closeDialog}>Cancelar</Button><Button disabled={busy} loading={busy} loadingLabel="Salvando…">Salvar</Button></div>
-      </form>
+      </form>}
     </dialog>
   </div>;
 }

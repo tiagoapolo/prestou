@@ -211,6 +211,7 @@ de fórmulas ao abrir o CSV em uma planilha.
 - formulário de receita avulsa com cliente opcional;
 - edição e ação “Excluir do Financeiro”, explicando que o recebimento sai dos
   cálculos sem reabrir a cobrança;
+- confirmação de exclusão em modal, sem alerta nativo do navegador;
 - estado vazio que explica como completar o mês;
 - download do CSV.
 
