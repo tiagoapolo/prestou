@@ -1,10 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { interpretMessage, type AssistantDeps } from "../src/orchestrator.ts";
+import {
+  interpretMessage,
+  type AssistantDeps,
+  type ChargeMemory,
+  type PartialCharge,
+} from "../src/orchestrator.ts";
 import type { LlmProvider, LlmToolCall } from "../src/llm.ts";
 
 function fixedLlm(call: LlmToolCall): LlmProvider {
   return { interpret: async () => call };
+}
+
+function memoryStore(): ChargeMemory & { data: Map<string, PartialCharge> } {
+  const data = new Map<string, PartialCharge>();
+  return {
+    data,
+    load: async (id) => data.get(id) ?? null,
+    save: async (id, partial) => { data.set(id, partial); },
+    clear: async (id) => { data.delete(id); },
+  };
 }
 
 const clients = [
@@ -143,6 +158,83 @@ test("pedido_nao_suportado devolve o escopo", async () => {
   assert.equal(result.kind, "text");
   assert.match(result.message, /Ainda não sei fazer isso/);
   assert.equal(result.kind === "text" ? result.classification : undefined, "unsupported");
+});
+
+test("cobrança retoma o rascunho pendente na mensagem seguinte", async () => {
+  const memory = memoryStore();
+  const base = {
+    providerId: "provider-1",
+    deps: deps(),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    now: new Date("2026-07-22T12:00:00Z"),
+    memory,
+  };
+
+  // 1) Cliente novo, sem WhatsApp → pede o telefone e guarda o parcial.
+  const first = await interpretMessage({
+    ...base,
+    message: "cobra o Joaquim 89 reais de vidraçaria",
+    llm: fixedLlm({
+      name: "preparar_cobranca",
+      arguments: {
+        clientName: "Joaquim",
+        clientWhatsapp: null,
+        description: "Vidraçaria",
+        amountCents: 8900,
+        dueDate: null,
+      },
+    }),
+  });
+  assert.equal(first.kind, "clarification");
+  assert.match(first.message, /WhatsApp de Joaquim/);
+  assert.ok(memory.data.has("provider-1"));
+
+  // 2) Só o telefone → mescla com o parcial e fecha o rascunho.
+  const second = await interpretMessage({
+    ...base,
+    message: "+55 41 997888888",
+    llm: fixedLlm({
+      name: "preparar_cobranca",
+      arguments: {
+        clientName: null,
+        clientWhatsapp: "+55 41 997888888",
+        description: null,
+        amountCents: null,
+        dueDate: null,
+      },
+    }),
+  });
+  assert.equal(second.kind, "draft");
+  if (second.kind !== "draft") return;
+  assert.equal(second.draft.client.name, "Joaquim");
+  assert.equal(second.draft.client.whatsapp, "41997888888");
+  assert.equal(second.draft.description, "Vidraçaria");
+  assert.equal(second.draft.amountCents, 8900);
+  assert.equal(memory.data.has("provider-1"), false);
+});
+
+test("trocar de assunto descarta o rascunho pendente", async () => {
+  const memory = memoryStore();
+  memory.data.set("provider-1", {
+    clientName: "Joaquim",
+    clientWhatsapp: null,
+    description: "Vidraçaria",
+    amountCents: 8900,
+    dueDate: null,
+  });
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "quem me deve?",
+    deps: deps(),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    now: new Date("2026-07-22T12:00:00Z"),
+    memory,
+    llm: fixedLlm({ name: "listar_inadimplentes", arguments: {} }),
+  });
+  assert.equal(result.kind, "text");
+  assert.equal(memory.data.has("provider-1"), false);
 });
 
 test("preparar_cobranca reaproveita cliente existente", async () => {

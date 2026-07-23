@@ -3,6 +3,7 @@ import { z } from "zod";
 import { interpretChargeMessage, type AssistantClient } from "../assistant.js";
 import { interpretMessage } from "../orchestrator.js";
 import { dbDeps } from "../assistant-data.js";
+import { dbChargeMemory } from "../charge-memory.js";
 import { requireProvider } from "../auth.js";
 import { config } from "../config.js";
 import { queryAll } from "../db.js";
@@ -67,6 +68,7 @@ export async function assistantRoutes(app: FastifyInstance): Promise<void> {
       model: config.openai.model,
       defaultDueDays: req.provider!.default_due_days,
       timeoutMs: config.openai.timeoutMs,
+      memory: dbChargeMemory,
     });
     return reply.send(result);
   });

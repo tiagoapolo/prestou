@@ -59,6 +59,24 @@ export interface AssistantDeps {
   financialSummary(providerId: string): Promise<FinancialSummary>;
 }
 
+/**
+ * Rascunho parcial de cobrança: os campos já extraídos, antes de qualquer default
+ * ou resolução de cliente. É o que persiste entre mensagens quando ainda falta um
+ * dado, para que a resposta seguinte retome de onde parou.
+ */
+export type PartialCharge = z.infer<typeof extractedChargeSchema>;
+
+/**
+ * Memória de curta duração do preenchimento de uma cobrança, escopada por
+ * prestador. O modelo nunca a lê: o merge é feito no backend. Opcional — sem ela,
+ * o orquestrador segue stateless (Dashboard single-shot, testes).
+ */
+export interface ChargeMemory {
+  load(providerId: string): Promise<PartialCharge | null>;
+  save(providerId: string, partial: PartialCharge): Promise<void>;
+  clear(providerId: string): Promise<void>;
+}
+
 export interface InterpretMessageInput {
   providerId: string;
   message: string;
@@ -70,6 +88,7 @@ export interface InterpretMessageInput {
   fetchImpl?: typeof fetch;
   now?: Date;
   timeoutMs?: number;
+  memory?: ChargeMemory;
 }
 
 const extractedChargeSchema = z.object({
@@ -164,6 +183,29 @@ export function matchingClients(
     const candidate = normalizedName(client.name);
     return candidate.includes(wanted) || wanted.includes(candidate);
   });
+}
+
+/**
+ * Combina o rascunho pendente com o que a mensagem atual trouxe: cada campo novo
+ * (não-nulo) sobrescreve o anterior; o que veio nulo herda do pendente. Se a
+ * mensagem cita um cliente diferente do rascunho, é outra cobrança — descarta o
+ * pendente para não vazar dados entre elas.
+ */
+export function mergeCharge(pending: PartialCharge | null, extracted: PartialCharge): PartialCharge {
+  if (!pending) return extracted;
+  if (
+    extracted.clientName && pending.clientName &&
+    normalizedName(extracted.clientName) !== normalizedName(pending.clientName)
+  ) {
+    return extracted;
+  }
+  return {
+    clientName: extracted.clientName ?? pending.clientName,
+    clientWhatsapp: extracted.clientWhatsapp ?? pending.clientWhatsapp,
+    description: extracted.description ?? pending.description,
+    amountCents: extracted.amountCents ?? pending.amountCents,
+    dueDate: extracted.dueDate ?? pending.dueDate,
+  };
 }
 
 function clarification(fields: string[]): AssistantResult {
@@ -341,13 +383,32 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
     fetchImpl: input.fetchImpl,
   });
 
+  // Qualquer intenção que não seja cobrança encerra um preenchimento em
+  // andamento: o prestador mudou de assunto e o rascunho parcial não deve
+  // sobreviver para uma cobrança futura (o TTL é só a rede de segurança).
+  if (call.name !== "preparar_cobranca" && input.memory) {
+    await input.memory.clear(input.providerId);
+  }
+
   switch (call.name) {
     case "preparar_cobranca": {
       const extracted = extractedChargeSchema.safeParse(call.arguments);
       if (!extracted.success) throw new AssistantServiceError("Campos inválidos do assistente");
+      const pending = input.memory ? await input.memory.load(input.providerId) : null;
+      const merged = mergeCharge(pending, extracted.data);
       const clients = await input.deps.listClients(input.providerId);
       const defaultDueDate = addDaysISO(today, input.defaultDueDays ?? 0);
-      return buildDraft(extracted.data, clients, defaultDueDate);
+      const result = buildDraft(merged, clients, defaultDueDate);
+      if (input.memory) {
+        // Ainda falta algo → guarda o parcial para a próxima mensagem retomar;
+        // rascunho pronto (ou erro de campo) → o preenchimento terminou.
+        if (result.kind === "clarification") {
+          await input.memory.save(input.providerId, merged);
+        } else {
+          await input.memory.clear(input.providerId);
+        }
+      }
+      return result;
     }
     case "listar_inadimplentes":
       return renderOverdue(await input.deps.listOverdue(input.providerId));

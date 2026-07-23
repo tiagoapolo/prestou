@@ -183,8 +183,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "f00bc1a2e5c3dfd3",
+  "active": "2b4bd72a31ba9622",
   "lastOpenFiles": [
+    "decisoes/ADR-010-memoria-de-preenchimento-de-cobranca.md",
     "protocolo-confirmacao-acoes-assistente.md"
   ]
 }

@@ -12,6 +12,7 @@ tags:
   - openai
 relacionado:
   - "[[ADR-008 - Assistente conversacional híbrido]]"
+  - "[[ADR-010 - Memória de preenchimento de cobrança (slot-filling)]]"
   - "[[ADR-001 - Arquitetura híbrida Supabase + Railway]]"
   - "[[ADR-002 - Autenticação por magic link]]"
   - "[[Protocolo de confirmação de ações do assistente]]"

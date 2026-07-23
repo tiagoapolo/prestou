@@ -10,6 +10,7 @@ import { formatBRL } from "../messages.js";
 import { notifyProvider } from "../notify.js";
 import { interpretMessage } from "../orchestrator.js";
 import { dbDeps } from "../assistant-data.js";
+import { dbChargeMemory } from "../charge-memory.js";
 import {
   chargeConfirmationPayload,
   parseInboundMessage,
@@ -358,6 +359,7 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
               model: config.openai.model,
               defaultDueDays: provider.default_due_days,
               timeoutMs: config.openai.timeoutMs,
+              memory: dbChargeMemory,
             });
             if (result.kind === "draft") {
               const proposalId = await createChargeProposal(provider.id, result.draft);
