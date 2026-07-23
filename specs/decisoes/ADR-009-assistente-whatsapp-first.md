@@ -267,9 +267,13 @@ armazenar texto integral nem dados identificáveis.
   de comprovante ou chave Pix ao modelo; logs só de intenção, resultado,
   latência e erro.
 
-## Estado implementado em 2026-07-22
+## Estado implementado até 2026-07-23
 
 - Orquestrador agnóstico de canal compartilhado por Dashboard e WhatsApp.
+- Settings exibe o estado atual do número, permite enviar ou reenviar o código,
+  confirmar os 6 dígitos e trocar o número, preservando os erros específicos da
+  API. O fluxo tem cobertura frontend focada em estado verificado, sucesso
+  completo e nova tentativa após erro de confirmação.
 - Webhook GET/POST com verify token e assinatura HMAC da Meta.
 - Identidade por número vinculado e verificado, incluindo equivalência do nono
   dígito brasileiro.
