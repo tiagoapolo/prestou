@@ -90,6 +90,7 @@ export async function runReminders(today = todayISO()): Promise<{
       waDeeplink: waMeLink(row.client_whatsapp, message),
       template: "lembrete_cobranca_prestador",
       templateParams: [row.client_name, formatBRL(row.amount_cents), label],
+      templateUrlButtonParam: row.charge_id,
     });
 
     await track({

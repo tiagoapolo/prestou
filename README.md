@@ -211,6 +211,18 @@ em `pt_BR`, com esta estrutura:
 No envio, a API preenche o corpo com nome do cliente, valor e serviço, e envia
 o identificador da cobrança separadamente como sufixo do botão de URL.
 
+O template `lembrete_cobranca_prestador` também deve ser cadastrado como
+**Utilidade**, em `pt_BR`, com esta estrutura:
+
+- cabeçalho: `Lembrete de cobrança`;
+- corpo: `A cobrança de *{{2}}* de {{1}} *{{3}}*. Acesse o Prestou para enviar o lembrete pronto.`;
+- botão de URL dinâmica: `Verificar`, apontando para
+  `https://SEU_SITE/cobranca/{{1}}`.
+
+No envio, a API preenche o corpo com nome do cliente, valor e situação do
+vencimento, e envia o identificador da cobrança separadamente como sufixo do
+botão de URL.
+
 Enquanto os templates definitivos não estiverem aprovados, valide o envio com
 o template de teste da Meta. O destinatário deve estar autorizado na seção de
 configuração da API do WhatsApp:

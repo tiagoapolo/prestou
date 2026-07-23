@@ -45,14 +45,29 @@ test("monta template de pagamento confirmado com três campos e botão de URL", 
   });
 });
 
-test("mantém templates sem botão compatíveis", () => {
+test("monta template de cobrança vencida com três campos e botão de URL", () => {
   const payload = buildWhatsAppTemplatePayload({
     to: "5511988887777",
     name: "lembrete_cobranca_prestador",
     language: "pt_BR",
-    bodyParams: ["Maria Cliente", "R$ 150,00", "vence hoje"],
+    bodyParams: ["Maria Cliente", "R$ 150,00", "está 2 dias em atraso"],
+    urlButtonParam: "charge-456",
   });
 
-  assert.equal(payload.template.components?.length, 1);
-  assert.equal(payload.template.components?.[0]?.type, "body");
+  assert.deepEqual(payload.template.components, [
+    {
+      type: "body",
+      parameters: [
+        { type: "text", text: "Maria Cliente" },
+        { type: "text", text: "R$ 150,00" },
+        { type: "text", text: "está 2 dias em atraso" },
+      ],
+    },
+    {
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [{ type: "text", text: "charge-456" }],
+    },
+  ]);
 });

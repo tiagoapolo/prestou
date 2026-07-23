@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "api-cobrancas-clientes-financeiro.md",
+                "file": "plano-painel-financeiro-fiscal.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "api-cobrancas-clientes-financeiro"
+              "title": "plano-painel-financeiro-fiscal"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "api-cobrancas-clientes-financeiro.md",
+                "file": "plano-painel-financeiro-fiscal.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for api-cobrancas-clientes-financeiro"
+              "title": "Backlinks for plano-painel-financeiro-fiscal"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "api-cobrancas-clientes-financeiro.md",
+                "file": "plano-painel-financeiro-fiscal.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from api-cobrancas-clientes-financeiro"
+              "title": "Outgoing links from plano-painel-financeiro-fiscal"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "api-cobrancas-clientes-financeiro.md",
+                "file": "plano-painel-financeiro-fiscal.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of api-cobrancas-clientes-financeiro"
+              "title": "Outline of plano-painel-financeiro-fiscal"
             }
           }
         ]
@@ -183,8 +183,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "2b4bd72a31ba9622",
+  "active": "f00bc1a2e5c3dfd3",
   "lastOpenFiles": [
+    "api-cobrancas-clientes-financeiro.md",
     "api-financeiro-caixa.md",
     "plano-painel-financeiro-fiscal.md",
     "decisoes/ADR-010-memoria-de-preenchimento-de-cobranca.md",
