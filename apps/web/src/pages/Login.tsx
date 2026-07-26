@@ -1,11 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 import { useAuth } from "../auth";
 import { ErrorNotice } from "../components";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { userMessage } from "../errors";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { publicApi } from "../api";
+import { env } from "../config";
 
 function openEmailClient(appUrl: string, webUrl: string) {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -23,11 +26,26 @@ function openEmailClient(appUrl: string, webUrl: string) {
 }
 
 export function LoginPage() {
-  const { sendMagicLink, error: authError } = useAuth();
+  const { sendMagicLink, sendOnboardingMagicLink, error: authError } = useAuth();
+  const [searchParams] = useSearchParams();
+  const onboardingToken = searchParams.get("token") ?? "";
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState(
+    onboardingToken && !env.turnstileSiteKey && import.meta.env.DEV ? "development" : "",
+  );
+  const [phoneMasked, setPhoneMasked] = useState("");
+  const turnstileRef = useRef<TurnstileInstance>(undefined);
+
+  useEffect(() => {
+    if (!onboardingToken) return;
+    publicApi<{ phoneMasked: string }>(
+      `/public/whatsapp-onboarding/${encodeURIComponent(onboardingToken)}`,
+    ).then((result) => setPhoneMasked(result.phoneMasked))
+      .catch((cause) => setError(userMessage(cause, "Este convite é inválido ou expirou.")));
+  }, [onboardingToken]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -39,10 +57,22 @@ export function LoginPage() {
     setBusy(true);
     setError("");
     try {
-      await sendMagicLink(normalizedEmail);
+      if (onboardingToken) {
+        if (!captchaToken) {
+          setError("Confirme que você não é um robô.");
+          return;
+        }
+        await sendOnboardingMagicLink(normalizedEmail, onboardingToken, captchaToken);
+      } else {
+        await sendMagicLink(normalizedEmail);
+      }
       setEmail(normalizedEmail);
       setSent(true);
     } catch (err) {
+      if (onboardingToken && env.turnstileSiteKey) {
+        setCaptchaToken("");
+        turnstileRef.current?.reset();
+      }
       setError(userMessage(err, "Não foi possível enviar o link de acesso. Tente novamente."));
     } finally {
       setBusy(false);
@@ -53,8 +83,8 @@ export function LoginPage() {
     <main className="auth-page">
       <section className="auth-card">
         <div className="brand hero-brand">prestou<span>.</span></div>
-        <p className="eyebrow">Seu Pix, sem perseguição</p>
-        <h1>{sent ? "Confira seu e-mail" : "Entre no seu painel"}</h1>
+        <p className="eyebrow">{onboardingToken ? "Cadastro por convite" : "Seu Pix, sem perseguição"}</p>
+        <h1>{sent ? "Confira seu e-mail" : onboardingToken ? "Conclua seu cadastro" : "Entre no seu painel"}</h1>
         {sent ? (
           <div className="stack">
             <p>Enviamos um link seguro para <strong>{email}</strong>. Toque nele para entrar.</p>
@@ -69,8 +99,22 @@ export function LoginPage() {
             <Label>E-mail
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@exemplo.com" />
             </Label>
+            {onboardingToken && phoneMasked && (
+              <p>WhatsApp validado: <strong>{phoneMasked}</strong></p>
+            )}
+            {onboardingToken && env.turnstileSiteKey && (
+              <Turnstile
+                ref={turnstileRef}
+                siteKey={env.turnstileSiteKey}
+                onSuccess={setCaptchaToken}
+                onExpire={() => setCaptchaToken("")}
+                onError={() => setCaptchaToken("")}
+              />
+            )}
             {(error || authError) && <ErrorNotice message={error || authError} />}
-            <Button loading={busy} loadingLabel="Enviando…">Receber link para entrar</Button>
+            <Button loading={busy} loadingLabel="Enviando…">
+              {onboardingToken ? "Receber link para concluir" : "Receber link para entrar"}
+            </Button>
             <small>Sem senha. O link expira e só funciona para você.</small>
           </form>
         )}

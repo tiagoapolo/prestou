@@ -103,6 +103,12 @@ export function whatsappIdentityCandidates(from: string): [string, string] {
   return [digits, digits];
 }
 
+/** Candidatos nacionais usados nas colunas canônicas do Prestou. */
+export function nationalWhatsAppIdentityCandidates(from: string): [string, string] {
+  const [first, second] = whatsappIdentityCandidates(from);
+  return [first.replace(/^55/, ""), second.replace(/^55/, "")];
+}
+
 /**
  * Extrai a primeira mensagem de texto de um payload de webhook da Cloud API.
  * Ignora status updates, reações e tipos não suportados nesta etapa (áudio é V2).

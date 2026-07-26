@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@supabase/supabase-js";
+import { seedInvitedOnboarding } from "./onboarding-fixture.ts";
 
 const integrationEnv = {
   databaseUrl: process.env.TEST_DATABASE_URL,
@@ -23,6 +24,7 @@ process.env.LOG_LEVEL = "silent";
 process.env.NODE_ENV = "test";
 
 const { buildServer } = await import("../src/server.ts");
+const { db, execute } = await import("../src/db.ts");
 const admin = createClient(integrationEnv.supabaseUrl!, integrationEnv.serviceRoleKey!, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -33,9 +35,11 @@ const authClient = createClient(integrationEnv.supabaseUrl!, integrationEnv.anon
 let app: Awaited<ReturnType<typeof buildServer>>;
 let token: string;
 let primaryIdentity: AuthIdentity;
+let primaryOnboardingToken: string;
 const authUserIds: string[] = [];
 
 interface AuthIdentity {
+  id: string;
   token: string;
   email: string;
   password: string;
@@ -53,17 +57,18 @@ async function createAuthIdentity(label: string): Promise<AuthIdentity> {
   authUserIds.push(created.data.user!.id);
   const signedIn = await authClient.auth.signInWithPassword({ email, password });
   assert.ifError(signedIn.error);
-  return { token: signedIn.data.session!.access_token, email, password };
-}
-
-async function createAuthUser(label: string): Promise<string> {
-  return (await createAuthIdentity(label)).token;
+  return { id: created.data.user!.id, token: signedIn.data.session!.access_token, email, password };
 }
 
 before(async () => {
   app = await buildServer();
   primaryIdentity = await createAuthIdentity("primary");
   token = primaryIdentity.token;
+  primaryOnboardingToken = await seedInvitedOnboarding(db, {
+    authUserId: primaryIdentity.id,
+    phone: "11988887777",
+    secret: integrationEnv.serviceRoleKey!,
+  });
   const res = await app.inject({
     method: "POST",
     url: "/api/providers",
@@ -71,7 +76,7 @@ before(async () => {
     payload: {
       name: "João Jardineiro",
       profession: "Jardinagem",
-      whatsapp: "11988887777",
+      onboardingToken: primaryOnboardingToken,
       pixKey: "11999998888",
       municipality: { name: "São Paulo", state: "SP", ibgeCode: "3550308" },
       consent: true,
@@ -84,10 +89,13 @@ before(async () => {
 });
 
 after(async () => {
-  await app.close();
+  for (const id of authUserIds) {
+    await execute("DELETE FROM private.whatsapp_signup_invites WHERE created_by = ?", id);
+  }
   await Promise.all(
     authUserIds.map((id) => admin.auth.admin.deleteUser(id)),
   );
+  await app.close();
 });
 
 function auth() {
@@ -124,8 +132,25 @@ test("F1 — rejeita onboarding com chave Pix inválida", async () => {
     payload: {
       name: "Teste",
       profession: "Teste",
-      whatsapp: "11988887777",
+      onboardingToken: primaryOnboardingToken,
       pixKey: "chave-invalida",
+      consent: true,
+    },
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test("onboarding rejeita telefone informado pelo navegador sem sessão convidada", async () => {
+  const rogue = await createAuthIdentity("rogue-onboarding");
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/providers",
+    headers: { authorization: `Bearer ${rogue.token}` },
+    payload: {
+      name: "Cadastro sem convite",
+      profession: "Teste",
+      whatsapp: "11999990000",
+      pixKey: "teste@prestou.com",
       consent: true,
     },
   });
@@ -142,7 +167,9 @@ test("prestador consulta e altera apenas suas configurações de recebimento", a
   assert.equal(current.json().settings.pixKey, "+5511999998888");
   assert.equal(current.json().settings.defaultDueDays, 0);
 
-  const updated = await app.inject({
+  // O número de WhatsApp não é editável por aqui: tentativas de contornar o
+  // fluxo start/confirm são rejeitadas.
+  const directNumberChange = await app.inject({
     method: "PATCH",
     url: "/api/providers/me/settings",
     headers: auth(),
@@ -152,10 +179,18 @@ test("prestador consulta e altera apenas suas configurações de recebimento", a
       defaultDueDays: 15,
     },
   });
+  assert.equal(directNumberChange.statusCode, 400);
+
+  const updated = await app.inject({
+    method: "PATCH",
+    url: "/api/providers/me/settings",
+    headers: auth(),
+    payload: { pixKey: "joao@prestou.com", defaultDueDays: 15 },
+  });
   assert.equal(updated.statusCode, 200);
   assert.deepEqual(updated.json().settings, {
     pixKey: "joao@prestou.com",
-    whatsapp: "11977776655",
+    whatsapp: "11988887777",
     defaultDueDays: 15,
   });
 
@@ -165,18 +200,14 @@ test("prestador consulta e altera apenas suas configurações de recebimento", a
     headers: auth(),
   });
   assert.equal(provider.json().provider.pixKeyType, "email");
-  assert.equal(provider.json().provider.whatsapp, "11977776655");
+  assert.equal(provider.json().provider.whatsapp, "11988887777");
   assert.equal(provider.json().provider.defaultDueDays, 15);
 
   const invalidDueDays = await app.inject({
     method: "PATCH",
     url: "/api/providers/me/settings",
     headers: auth(),
-    payload: {
-      pixKey: "joao@prestou.com",
-      whatsapp: "11977776655",
-      defaultDueDays: 2,
-    },
+    payload: { pixKey: "joao@prestou.com", defaultDueDays: 2 },
   });
   assert.equal(invalidDueDays.statusCode, 400);
 
@@ -184,7 +215,7 @@ test("prestador consulta e altera apenas suas configurações de recebimento", a
     method: "PATCH",
     url: "/api/providers/me/settings",
     headers: auth(),
-    payload: { pixKey: "inválida", whatsapp: "11977776655" },
+    payload: { pixKey: "inválida" },
   });
   assert.equal(invalid.statusCode, 400);
 });
@@ -565,7 +596,13 @@ test("cliente confirmando duas vezes não quebra nem duplica estado", async () =
 
 test("prestador não acessa parcela de outro prestador", async () => {
   const charge = await createCharge();
-  const otherToken = await createAuthUser("other");
+  const otherIdentity = await createAuthIdentity("other");
+  const otherToken = otherIdentity.token;
+  const otherOnboardingToken = await seedInvitedOnboarding(db, {
+    authUserId: otherIdentity.id,
+    phone: "11955554444",
+    secret: integrationEnv.serviceRoleKey!,
+  });
   const other = await app.inject({
     method: "POST",
     url: "/api/providers",
@@ -573,7 +610,7 @@ test("prestador não acessa parcela de outro prestador", async () => {
     payload: {
       name: "Outro Prestador",
       profession: "Lavagem",
-      whatsapp: "11955554444",
+      onboardingToken: otherOnboardingToken,
       pixKey: "outro@prestou.com",
       consent: true,
     },
@@ -658,7 +695,13 @@ test("lista cobranças recentes com paginação e filtros", async () => {
 });
 
 test("lista somente os clientes do prestador autenticado", async () => {
-  const otherToken = await createAuthUser("clients-other");
+  const otherIdentity = await createAuthIdentity("clients-other");
+  const otherToken = otherIdentity.token;
+  const otherOnboardingToken = await seedInvitedOnboarding(db, {
+    authUserId: otherIdentity.id,
+    phone: "11944443333",
+    secret: integrationEnv.serviceRoleKey!,
+  });
   const otherProvider = await app.inject({
     method: "POST",
     url: "/api/providers",
@@ -666,7 +709,7 @@ test("lista somente os clientes do prestador autenticado", async () => {
     payload: {
       name: "Prestador Clientes",
       profession: "Pintura",
-      whatsapp: "11944443333",
+      onboardingToken: otherOnboardingToken,
       pixKey: "clientes@prestou.com",
       consent: true,
     },

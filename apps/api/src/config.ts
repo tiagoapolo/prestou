@@ -17,7 +17,28 @@ function positiveIntegerEnv(name: string, fallback: number): number {
   return value;
 }
 
+function booleanEnv(name: string, fallback: boolean): boolean {
+  const value = env(name, fallback ? "true" : "false");
+  if (value !== "true" && value !== "false") {
+    throw new Error(`Variável de ambiente deve ser true ou false: ${name}`);
+  }
+  return value === "true";
+}
+
+function enumEnv<const T extends readonly string[]>(
+  name: string,
+  values: T,
+  fallback: T[number],
+): T[number] {
+  const value = env(name, fallback);
+  if (!(values as readonly string[]).includes(value)) {
+    throw new Error(`Variável de ambiente inválida: ${name}`);
+  }
+  return value as T[number];
+}
+
 export const config = {
+  nodeEnv: enumEnv("NODE_ENV", ["development", "test", "production"] as const, "development"),
   port: Number(env("PORT", "3333")),
   publicWebUrl: env("PUBLIC_WEB_URL", "http://localhost:3000").replace(/\/$/, ""),
   databaseUrl: requiredEnv("DATABASE_URL"),
@@ -28,7 +49,7 @@ export const config = {
     .map((origin) => origin.trim())
     .filter(Boolean),
   whatsapp: {
-    mode: env("WHATSAPP_MODE", "log") as "log" | "cloud-api",
+    mode: enumEnv("WHATSAPP_MODE", ["log", "cloud-api"] as const, "log"),
     phoneNumberId: env("WHATSAPP_PHONE_NUMBER_ID"),
     accessToken: env("WHATSAPP_ACCESS_TOKEN"),
     templateLang: env("WHATSAPP_TEMPLATE_LANG", "pt_BR"),
@@ -36,6 +57,32 @@ export const config = {
     // X-Hub-Signature-256 dos POSTs). Só exigidos quando o inbound está ativo.
     verifyToken: env("WHATSAPP_VERIFY_TOKEN"),
     appSecret: env("WHATSAPP_APP_SECRET"),
+    // Template de autenticação aprovado na Meta para entregar o OTP. Obrigatório
+    // no modo cloud-api (código nunca vai em texto livre).
+    authTemplate: env("WHATSAPP_AUTH_TEMPLATE"),
+    // Segredo do HMAC-SHA-256 dos códigos de verificação. Sem env dedicada,
+    // deriva do service role key (segredo forte, só no servidor) — evita ops
+    // extra no piloto sem guardar o código em claro.
+    verificationSecret: env("WHATSAPP_VERIFICATION_SECRET"),
+    signup: {
+      enabled: booleanEnv("WHATSAPP_SIGNUP_ENABLED", false),
+      onboardingSecret: env("WHATSAPP_ONBOARDING_SECRET"),
+      turnstileSecret: env("TURNSTILE_SECRET_KEY"),
+      sessionTtlMinutes: positiveIntegerEnv("WHATSAPP_ONBOARDING_SESSION_TTL_MINUTES", 24 * 60),
+      linkTtlMinutes: positiveIntegerEnv("WHATSAPP_ONBOARDING_LINK_TTL_MINUTES", 15),
+      globalDailyLimit: positiveIntegerEnv("WHATSAPP_SIGNUP_GLOBAL_DAILY_LIMIT", 50),
+      phoneDailyLimit: positiveIntegerEnv("WHATSAPP_SIGNUP_PHONE_DAILY_LIMIT", 3),
+      emailCooldownSeconds: positiveIntegerEnv("WHATSAPP_SIGNUP_EMAIL_COOLDOWN_SECONDS", 60),
+    },
+    verification: {
+      ttlMinutes: positiveIntegerEnv("WHATSAPP_VERIFICATION_TTL_MINUTES", 10),
+      resendCooldownSeconds: positiveIntegerEnv("WHATSAPP_VERIFICATION_RESEND_SECONDS", 60),
+      maxAttempts: positiveIntegerEnv("WHATSAPP_VERIFICATION_MAX_ATTEMPTS", 5),
+      // Tetos diários de envio de código, aplicados atomicamente no banco.
+      providerDailyLimit: positiveIntegerEnv("WHATSAPP_VERIFICATION_PROVIDER_DAILY", 5),
+      candidateDailyLimit: positiveIntegerEnv("WHATSAPP_VERIFICATION_CANDIDATE_DAILY", 5),
+      globalDailyLimit: positiveIntegerEnv("WHATSAPP_VERIFICATION_GLOBAL_DAILY", 1_000),
+    },
     guardrail: {
       perMinute: positiveIntegerEnv("WHATSAPP_RATE_LIMIT_PER_MINUTE", 10),
       perDay: positiveIntegerEnv("WHATSAPP_DAILY_MESSAGE_LIMIT", 100),

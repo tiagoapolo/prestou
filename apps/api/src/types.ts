@@ -19,6 +19,8 @@ export interface ProviderRow {
   pix_key: string;
   pix_key_type: string;
   whatsapp: string;
+  /** Prova de posse do número (inbound wa_id / OTP). Null = ainda não provado. */
+  whatsapp_verified_at: string;
   default_due_days: DefaultDueDays;
   consent_at: string;
   created_at: string;

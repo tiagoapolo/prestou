@@ -11,6 +11,13 @@ declare module "fastify" {
   }
 }
 
+export async function isAppAdmin(authUserId: string): Promise<boolean> {
+  return Boolean(await queryOne<{ auth_user_id: string }>(
+    "SELECT auth_user_id FROM private.app_admins WHERE auth_user_id = ?",
+    authUserId,
+  ));
+}
+
 const authClient = createClient(config.supabase.url, config.supabase.anonKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -46,6 +53,10 @@ export async function requireAuthUser(
     await reply.code(403).send({ error: "Não foi possível validar sua conta. Entre novamente." });
     return;
   }
+  if (!userResult.data.user.email_confirmed_at) {
+    await reply.code(403).send({ error: "Confirme seu e-mail para continuar." });
+    return;
+  }
   req.authUser = {
     id: userResult.data.user.id,
     email: userResult.data.user.email,
@@ -73,4 +84,16 @@ export async function requireProvider(
     return;
   }
   req.provider = provider;
+}
+
+/** Autoriza operações administrativas do piloto por identidade server-side. */
+export async function requireAppAdmin(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  await requireAuthUser(req, reply);
+  if (reply.sent) return;
+  if (!(await isAppAdmin(req.authUser!.id))) {
+    await reply.code(403).send({ error: "Você não tem permissão para realizar esta ação." });
+  }
 }

@@ -107,7 +107,8 @@ pnpm dev:web
 - API: `http://localhost:3333`
 - Health check: `http://localhost:3333/health`
 
-O login local usa magic link real do Supabase. Cadastre `http://localhost:3000` nas redirect URLs do Auth.
+O login local usa magic link real do Supabase. Cadastre `http://localhost:3000`
+e `http://localhost:3000/cadastro` nas redirect URLs do Auth.
 
 ## Configuração do Supabase
 
@@ -129,9 +130,15 @@ A migração cria:
 Configure no Supabase Auth:
 
 - Site URL do frontend publicado;
-- redirect URL do frontend;
+- redirect URL do frontend e `/cadastro` (retorno do convite por magic link);
 - magic link por e-mail;
+- criação pública de usuários desabilitada; o onboarding cria a identidade
+  server-side depois de convite + CAPTCHA;
 - SMTP próprio antes de ampliar o piloto, se necessário.
+
+No piloto por convite, configure também o Turnstile, o template de autenticação
+`WHATSAPP_AUTH_TEMPLATE` para troca posterior de número e um cron autenticado
+para `POST /api/internal/run-whatsapp-onboarding-retention`.
 
 ## Variáveis da API
 

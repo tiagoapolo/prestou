@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "plano-cadastro-prestador-whatsapp.md",
+                "file": "fluxo-cadastro-convite-autenticacao-whatsapp.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "plano-cadastro-prestador-whatsapp"
+              "title": "fluxo-cadastro-convite-autenticacao-whatsapp"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "plano-cadastro-prestador-whatsapp.md",
+                "file": "fluxo-cadastro-convite-autenticacao-whatsapp.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for plano-cadastro-prestador-whatsapp"
+              "title": "Backlinks for fluxo-cadastro-convite-autenticacao-whatsapp"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "plano-cadastro-prestador-whatsapp.md",
+                "file": "fluxo-cadastro-convite-autenticacao-whatsapp.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from plano-cadastro-prestador-whatsapp"
+              "title": "Outgoing links from fluxo-cadastro-convite-autenticacao-whatsapp"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "plano-cadastro-prestador-whatsapp.md",
+                "file": "fluxo-cadastro-convite-autenticacao-whatsapp.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of plano-cadastro-prestador-whatsapp"
+              "title": "Outline of fluxo-cadastro-convite-autenticacao-whatsapp"
             }
           }
         ]
@@ -185,11 +185,12 @@
   },
   "active": "f00bc1a2e5c3dfd3",
   "lastOpenFiles": [
-    "plano-painel-financeiro-fiscal.md",
-    "plano-cadastro-prestador-whatsapp.md",
-    "api-cobrancas-clientes-financeiro.md",
-    "api-financeiro-caixa.md",
     "decisoes/ADR-010-memoria-de-preenchimento-de-cobranca.md",
-    "protocolo-confirmacao-acoes-assistente.md"
+    "plano-cadastro-prestador-whatsapp.md",
+    "fluxo-cadastro-convite-autenticacao-whatsapp.md",
+    "api-cobrancas-clientes-financeiro.md",
+    "protocolo-confirmacao-acoes-assistente.md",
+    "plano-painel-financeiro-fiscal.md",
+    "api-financeiro-caixa.md"
   ]
 }

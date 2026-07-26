@@ -13,7 +13,23 @@ export interface NotifyInput {
   provider: ProviderRow;
   paymentId?: string;
   kind: NotificationKind;
-  /** Corpo legível (usado no modo log e como fallback). */
+  /**
+   * Destino explícito em E.164 (sem "+"). Usado na verificação de número, onde
+   * o código precisa ir ao número *candidato*, não ao provider.whatsapp atual.
+   * Ausente → cai no provider.whatsapp.
+   */
+  to?: string;
+  /**
+   * Quando true, uma falha de entrega (cloud-api) é propagada ao chamador em vez
+   * de engolida. Usado no OTP: o /start não pode reportar sucesso se o código
+   * não saiu.
+   */
+  required?: boolean;
+  /**
+   * Corpo legível persistido em `notifications.body` e nos logs. NUNCA deve
+   * conter segredos como o código OTP — o código viaja só no template enviado à
+   * Meta (templateParams), nunca aqui.
+   */
   body: string;
   /** Link wa.me pronto pro prestador reenviar ao cliente em um toque. */
   waDeeplink?: string;
@@ -95,7 +111,7 @@ export async function notifyProvider(input: NotifyInput): Promise<void> {
   if (config.whatsapp.mode === "log") {
     await insert("logged", null);
     console.info(
-      `[notify:log] → ${input.provider.whatsapp} (${input.kind}): ${input.body}`,
+      `[notify:log] → ${input.to ?? input.provider.whatsapp} (${input.kind}): ${input.body}`,
     );
     return;
   }
@@ -106,8 +122,10 @@ export async function notifyProvider(input: NotifyInput): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await insert("failed", message);
-    // Falha de notificação não pode derrubar a operação de negócio.
     console.error(`[notify:cloud-api] falhou: ${message}`);
+    // Notificações de negócio não podem derrubar a operação; o OTP, sim — se o
+    // código não saiu, o chamador precisa saber e não reportar sucesso.
+    if (input.required) throw err;
   }
 }
 
@@ -123,7 +141,7 @@ async function sendViaCloudApi(input: NotifyInput): Promise<void> {
     );
   }
 
-  const to = input.provider.whatsapp.replace(/\D/g, "");
+  const to = (input.to ?? input.provider.whatsapp).replace(/\D/g, "");
   const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
 
   const payload = input.template

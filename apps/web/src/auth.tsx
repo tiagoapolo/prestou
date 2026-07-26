@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AuthError, Session } from "@supabase/supabase-js";
-import { api, ApiError } from "./api";
+import { api, ApiError, publicApi } from "./api";
 import { UserFacingError, userMessage } from "./errors";
 import { supabase } from "./supabase";
 import type { Provider } from "./types";
@@ -12,6 +12,7 @@ interface AuthValue {
   provider: Provider | null;
   error: string;
   sendMagicLink(email: string): Promise<void>;
+  sendOnboardingMagicLink(email: string, onboardingToken: string, captchaToken: string): Promise<void>;
   signOut(): Promise<void>;
   refreshProvider(): Promise<void>;
 }
@@ -83,7 +84,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
-          shouldCreateUser: true,
+          shouldCreateUser: false,
+        },
+      });
+      if (error) throw magicLinkError(error);
+    },
+    async sendOnboardingMagicLink(email, onboardingToken, captchaToken) {
+      setAuthError("");
+      if (!supabase) throw new UserFacingError("O acesso está temporariamente indisponível. Tente novamente mais tarde.");
+      await publicApi(`/public/whatsapp-onboarding/${encodeURIComponent(onboardingToken)}/email`, {
+        method: "POST",
+        body: JSON.stringify({ email, captchaToken }),
+      });
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/cadastro?token=${encodeURIComponent(onboardingToken)}`,
+          shouldCreateUser: false,
         },
       });
       if (error) throw magicLinkError(error);
