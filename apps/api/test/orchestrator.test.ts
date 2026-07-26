@@ -207,6 +207,33 @@ test("cobrança retoma o rascunho pendente na mensagem seguinte", async () => {
   assert.equal(memory.data.has("provider-1"), false);
 });
 
+test("telefone inválido mantém o rascunho e pede um WhatsApp válido", async () => {
+  const memory = memoryStore();
+  memory.data.set("provider-1", {
+    clientName: "Matheus",
+    clientWhatsapp: null,
+    description: "Lavagem",
+    amountCents: 10000,
+    dueDate: null,
+  });
+
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "419789888888",
+    deps: deps(),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    memory,
+    llm: { interpret: async () => {
+      throw new Error("telefone inválido não deve chegar ao classificador");
+    } },
+  });
+
+  assert.equal(result.kind, "clarification");
+  assert.match(result.message, /WhatsApp válido com DDD/);
+  assert.equal(memory.data.has("provider-1"), true);
+});
+
 test("trocar de assunto descarta o rascunho pendente", async () => {
   const memory = memoryStore();
   memory.data.set("provider-1", {

@@ -172,10 +172,8 @@ function normalizedName(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 }
 
-function standaloneWhatsapp(message: string): string | null {
-  if (!/^[\d\s()+.-]+$/.test(message)) return null;
-  const parsed = mobileSchema.safeParse(message);
-  return parsed.success ? parsed.data : null;
+function looksLikeStandaloneWhatsapp(message: string): boolean {
+  return /\d/.test(message) && /^[\d\s()+.-]+$/.test(message);
 }
 
 function validText(value: string | null, label: string, min: number, max: number): string | null {
@@ -386,10 +384,17 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
 
   // Uma resposta contendo só o telefone é inequívoca durante o preenchimento e
   // não precisa voltar ao classificador stateless, que não conhece o rascunho.
-  const phoneReply = standaloneWhatsapp(input.message);
-  const phoneReplyPending = phoneReply && input.memory
+  const isPhoneReply = looksLikeStandaloneWhatsapp(input.message);
+  const parsedPhoneReply = isPhoneReply ? mobileSchema.safeParse(input.message) : null;
+  const phoneReplyPending = isPhoneReply && input.memory
     ? await input.memory.load(input.providerId)
     : null;
+
+  if (phoneReplyPending && parsedPhoneReply && !parsedPhoneReply.success) {
+    return clarification(["um WhatsApp válido com DDD"]);
+  }
+
+  const phoneReply = parsedPhoneReply?.success ? parsedPhoneReply.data : null;
 
   const call: LlmToolCall = phoneReply && phoneReplyPending
     ? {
