@@ -6,13 +6,13 @@ import { chargeDraftSchema, createCharge } from "../charge-creation.js";
 import { config } from "../config.js";
 import { execute, queryAll, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
-import { formatBRL } from "../messages.js";
 import { notifyProvider } from "../notify.js";
 import { interpretMessage } from "../orchestrator.js";
 import { dbDeps } from "../assistant-data.js";
 import { dbChargeMemory } from "../charge-memory.js";
 import {
   chargeConfirmationPayload,
+  createdChargeMessages,
   parseInboundMessage,
   parseWhatsAppChargeAction,
   renderResult,
@@ -85,6 +85,7 @@ const chargeProposalResultSchema = z.object({
   paymentUrl: z.string().url(),
   clientName: z.string(),
   amountCents: z.number().int().positive(),
+  description: z.string().optional(),
 }).strict();
 
 type ChargeProposalResult = z.infer<typeof chargeProposalResultSchema>;
@@ -130,16 +131,6 @@ async function createChargeProposal(
   return proposalId;
 }
 
-function createdChargeMessage(result: ChargeProposalResult, alreadyCreated: boolean): string {
-  const prefix = alreadyCreated ? "Esta cobrança já foi criada." : "Cobrança criada com sucesso.";
-  return (
-    `${prefix}\n` +
-    `• Cliente: ${result.clientName}\n` +
-    `• Valor: ${formatBRL(result.amountCents)}\n` +
-    `• Link para enviar ao cliente: ${result.paymentUrl}`
-  );
-}
-
 async function handleChargeProposalAction(
   log: FastifyInstance["log"],
   to: string,
@@ -159,7 +150,7 @@ async function handleChargeProposalAction(
       if (!proposal) return "Não encontrei esse rascunho. Prepare uma nova cobrança.";
       if (proposal.consumed_at) {
         const result = chargeProposalResultSchema.parse(persistedJson(proposal.result));
-        return createdChargeMessage(result, true);
+        return createdChargeMessages(result, true);
       }
       if (proposal.cancelled_at) return "Esse rascunho já foi cancelado.";
       if (proposal.expired) return "Esse rascunho expirou. Prepare uma nova cobrança.";
@@ -179,15 +170,17 @@ async function handleChargeProposalAction(
         paymentUrl: created.payment.paymentUrl,
         clientName: created.charge.client.name,
         amountCents: created.charge.amountCents,
+        description: created.charge.description,
       };
       await tx.execute(`
         UPDATE whatsapp_charge_proposals
            SET consumed_at = CURRENT_TIMESTAMP, result = ?::text::jsonb
          WHERE id = ?
       `, JSON.stringify(result), proposal.id);
-      return createdChargeMessage(result, false);
+      return createdChargeMessages(result, false);
     });
-    await deliverReply(log, to, message);
+    const messages = Array.isArray(message) ? message : [message];
+    for (const item of messages) await deliverReply(log, to, item);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode;
     if (statusCode === 400 || statusCode === 422) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import {
   chargeConfirmationPayload,
+  createdChargeMessages,
   parseInboundMessage,
   parseWhatsAppChargeAction,
   renderResult,
@@ -119,6 +120,24 @@ test("ação e payload dos botões usam somente o ID da proposta", () => {
     ["Criar cobrança", "Cancelar"],
   );
   assert.equal(JSON.stringify(payload).includes("amountCents"), false);
+});
+
+test("confirmação da cobrança gera resumo e mensagem para encaminhar", () => {
+  const messages = createdChargeMessages({
+    clientName: "Matheus",
+    amountCents: 10000,
+    description: "lavagem",
+    paymentUrl: "https://prestou.app/pay/token",
+  }, false);
+
+  assert.deepEqual(messages, [
+    "Cobrança criada com sucesso.\n" +
+      "• Cliente: Matheus\n" +
+      "• Valor: R$ 100,00\n\n" +
+      "Se quiser, encaminhe a mensagem abaixo para o cliente.",
+    "Oi Matheus, segue o link de pagamento referente ao serviço lavagem.\n" +
+      "https://prestou.app/pay/token",
+  ]);
 });
 
 test("renderResult transforma texto e rascunho em mensagem", () => {

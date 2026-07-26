@@ -1,5 +1,35 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { AssistantResult } from "../orchestrator.js";
+import { formatBRL } from "../format.js";
+
+interface CreatedChargeMessageInput {
+  clientName: string;
+  amountCents: number;
+  paymentUrl: string;
+  description?: string;
+}
+
+export function createdChargeMessages(
+  result: CreatedChargeMessageInput,
+  alreadyCreated: boolean,
+): string[] {
+  const prefix = alreadyCreated ? "Esta cobrança já foi criada." : "Cobrança criada com sucesso.";
+  const summary = (
+    `${prefix}\n` +
+    `• Cliente: ${result.clientName}\n` +
+    `• Valor: ${formatBRL(result.amountCents)}`
+  );
+
+  // Propostas consumidas antes deste formato não persistiam a descrição.
+  if (!result.description) {
+    return [`${summary}\n• Link para enviar ao cliente: ${result.paymentUrl}`];
+  }
+
+  return [
+    `${summary}\n\nSe quiser, encaminhe a mensagem abaixo para o cliente.`,
+    `Oi ${result.clientName}, segue o link de pagamento referente ao serviço ${result.description}.\n${result.paymentUrl}`,
+  ];
+}
 
 /**
  * Verifica a assinatura `X-Hub-Signature-256` da Meta sobre o corpo cru do
