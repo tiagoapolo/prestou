@@ -6,9 +6,8 @@ import { UserFacingError } from "../errors";
 import { SettingsPage } from "./Settings";
 
 vi.mock("../api", () => ({ api: vi.fn() }));
-const authState = vi.hoisted(() => ({ admin: false }));
 vi.mock("../auth", () => ({
-  useAuth: () => ({ provider: { admin: authState.admin }, refreshProvider: vi.fn() }),
+  useAuth: () => ({ refreshProvider: vi.fn() }),
 }));
 
 const mockApi = vi.mocked(api);
@@ -32,7 +31,6 @@ interface NumberStatus {
 function mockRequests(initial: NumberStatus, confirmError = false, startUnavailable = false) {
   let status = initial;
   let shouldFailConfirmation = confirmError;
-  let invites: Array<{ id: string; phone: string; status: string; expires_at: string }> = [];
   mockApi.mockImplementation(<T,>(path: string, init?: RequestInit): Promise<T> => {
     if (path === "/api/providers/me/settings") return Promise.resolve({ settings } as T);
     if (path === "/api/whatsapp/number") return Promise.resolve(status as T);
@@ -54,26 +52,6 @@ function mockRequests(initial: NumberStatus, confirmError = false, startUnavaila
       };
       return Promise.resolve({ verified: true } as T);
     }
-    if (path === "/api/admin/whatsapp-invites") {
-      if (init?.method === "POST") {
-        const phone = JSON.parse(String(init.body ?? "{}")).phone as string;
-        invites = [{
-          id: "11111111-1111-4111-8111-111111111111",
-          phone,
-          status: "pending",
-          expires_at: "2026-07-31T12:00:00.000Z",
-        }, ...invites];
-        return Promise.resolve({ invite: invites[0] } as T);
-      }
-      return Promise.resolve({ invites } as T);
-    }
-    if (path.endsWith("/revoke")) {
-      const id = path.split("/").at(-2);
-      invites = invites.map((invite) =>
-        invite.id === id ? { ...invite, status: "revoked" } : invite
-      );
-      return Promise.resolve({ revoked: true } as T);
-    }
     return Promise.reject(new Error(`Request inesperado: ${path}`));
   });
 }
@@ -85,7 +63,6 @@ function renderPage() {
 describe("número do WhatsApp nas configurações", () => {
   beforeEach(() => {
     mockApi.mockReset();
-    authState.admin = false;
   });
   afterEach(cleanup);
 
@@ -148,31 +125,5 @@ describe("número do WhatsApp nas configurações", () => {
 
     expect(await screen.findByText(/Se o número puder ser vinculado/)).toBeTruthy();
     expect(screen.queryByText(/Código enviado/)).toBeNull();
-  });
-
-  it("permite ao administrador criar e revogar um convite", async () => {
-    authState.admin = true;
-    mockRequests({ phone: "11987654321", verified: true, pendingCandidate: null });
-    renderPage();
-
-    const input = await screen.findByLabelText("Número convidado");
-    fireEvent.change(input, { target: { value: "11976543210" } });
-    fireEvent.click(screen.getByRole("button", { name: "Criar convite" }));
-
-    expect(await screen.findByText("(11) 97654-3210")).toBeTruthy();
-    expect(mockApi).toHaveBeenCalledWith(
-      "/api/admin/whatsapp-invites",
-      {
-        method: "POST",
-        body: JSON.stringify({ phone: "11976543210", expiresInDays: 7 }),
-      },
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Revogar" }));
-    await waitFor(() => expect(mockApi).toHaveBeenCalledWith(
-      "/api/admin/whatsapp-invites/11111111-1111-4111-8111-111111111111/revoke",
-      { method: "POST" },
-    ));
-    expect(await screen.findByText("revoked")).toBeTruthy();
   });
 });

@@ -27,15 +27,8 @@ interface WhatsappNumberStatus {
   pendingCandidate: string | null;
 }
 
-interface WhatsappInvite {
-  id: string;
-  phone: string;
-  status: "pending" | "claimed" | "consumed" | "revoked";
-  expires_at: string;
-}
-
 export function SettingsPage() {
-  const { provider, refreshProvider } = useAuth();
+  const { refreshProvider } = useAuth();
   const [settings, setSettings] = useState<ProviderSettings | null>(null);
   const [pixKey, setPixKey] = useState("");
   const [defaultDueDays, setDefaultDueDays] = useState<DefaultDueDays>(0);
@@ -50,10 +43,6 @@ export function SettingsPage() {
   const [verificationLoading, setVerificationLoading] = useState(true);
   const [verificationError, setVerificationError] = useState("");
   const [verificationNotice, setVerificationNotice] = useState("");
-  const [invitePhone, setInvitePhone] = useState("");
-  const [invites, setInvites] = useState<WhatsappInvite[]>([]);
-  const [inviteBusy, setInviteBusy] = useState(false);
-  const [inviteError, setInviteError] = useState("");
 
   useEffect(() => {
     api<{ settings: ProviderSettings }>("/api/providers/me/settings")
@@ -66,52 +55,6 @@ export function SettingsPage() {
 
     loadNumberStatus();
   }, []);
-
-  useEffect(() => {
-    if (!provider?.admin) return;
-    loadInvites();
-  }, [provider?.admin]);
-
-  async function loadInvites() {
-    try {
-      const result = await api<{ invites: WhatsappInvite[] }>("/api/admin/whatsapp-invites");
-      setInvites(result.invites);
-    } catch (cause) {
-      setInviteError(userMessage(cause, "Não foi possível carregar os convites."));
-    }
-  }
-
-  async function createInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setInviteError("");
-    if (!isValidMobile(invitePhone)) {
-      setInviteError("Informe um celular válido com DDD.");
-      return;
-    }
-    setInviteBusy(true);
-    try {
-      await api("/api/admin/whatsapp-invites", {
-        method: "POST",
-        body: JSON.stringify({ phone: normalizeMobile(invitePhone), expiresInDays: 7 }),
-      });
-      setInvitePhone("");
-      await loadInvites();
-    } catch (cause) {
-      setInviteError(userMessage(cause, "Não foi possível criar o convite."));
-    } finally {
-      setInviteBusy(false);
-    }
-  }
-
-  async function revokeInvite(id: string) {
-    setInviteError("");
-    try {
-      await api(`/api/admin/whatsapp-invites/${id}/revoke`, { method: "POST" });
-      await loadInvites();
-    } catch (cause) {
-      setInviteError(userMessage(cause, "Não foi possível revogar o convite."));
-    }
-  }
 
   async function loadNumberStatus() {
     setVerificationLoading(true);
@@ -283,27 +226,6 @@ export function SettingsPage() {
           </div>}
         </Card>
 
-        {provider?.admin && <Card className="form-card">
-          <div className="settings-section-heading">
-            <div><p className="eyebrow">Piloto</p><h2>Convites por WhatsApp</h2></div>
-          </div>
-          <p className="settings-help">
-            O convite é ativado somente quando o próprio número conversa com o WhatsApp do Prestou.
-          </p>
-          <form onSubmit={createInvite} className="stack">
-            <Label>Número convidado<Input required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={invitePhone} onChange={(event) => setInvitePhone(formatMobile(event.target.value))} maxLength={15} /></Label>
-            <Button variant="outline" loading={inviteBusy} loadingLabel="Convidando…">Criar convite</Button>
-          </form>
-          {inviteError && <ErrorNotice message={inviteError} />}
-          {invites.length > 0 && <div className="stack">
-            {invites.map((invite) => <div key={invite.id} className="invite-row">
-              <span><strong>{formatMobile(invite.phone)}</strong><small>{invite.status}</small></span>
-              {(invite.status === "pending" || invite.status === "claimed") && (
-                <Button type="button" variant="ghost" onClick={() => revokeInvite(invite.id)}>Revogar</Button>
-              )}
-            </div>)}
-          </div>}
-        </Card>}
       </>}
     </div>
   );

@@ -2,7 +2,7 @@ import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { userMessage } from "./errors";
-import { LoaderCircle, Settings, WalletCards } from "lucide-react";
+import { LoaderCircle, Settings, Shield, WalletCards } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
 }
 
 export function AppShell() {
-  const { signOut } = useAuth();
+  const { provider, signOut } = useAuth();
   const [error, setError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   async function handleSignOut() {
@@ -53,6 +53,7 @@ export function AppShell() {
         <Link to="/" className="brand">prestou<span>.</span></Link>
         <div className="topbar-actions">
           <Button asChild variant="ghost" size="sm"><NavLink to="/financeiro" className={({ isActive }) => `topbar-nav${isActive ? " active" : ""}`}><WalletCards aria-hidden="true" />Financeiro</NavLink></Button>
+          {provider?.admin && <Button asChild variant="ghost" size="sm"><NavLink to="/admin" className={({ isActive }) => `topbar-nav${isActive ? " active" : ""}`}><Shield aria-hidden="true" />Admin</NavLink></Button>}
           <Button asChild variant="ghost" size="sm"><Link to="/configuracoes"><Settings aria-hidden="true" />Configurações</Link></Button>
           <Button variant="ghost" size="sm" loading={signingOut} loadingLabel="Saindo…" onClick={handleSignOut} aria-label="Sair">Sair</Button>
         </div>

@@ -10,6 +10,7 @@ import { PublicPaymentPage } from "./pages/PublicPayment";
 import { SettingsPage } from "./pages/Settings";
 import { PrivacyPage } from "./pages/Privacy";
 import { FinancialPage } from "./pages/Financial";
+import { AdminPage } from "./pages/Admin";
 
 function PrivateApp() {
   const auth = useAuth();
@@ -25,6 +26,7 @@ function PrivateApp() {
         <Route path="nova" element={<NewChargePage />} />
         <Route path="cobranca/:id" element={<ChargeDetailPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
+        <Route path="admin" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
