@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { amountCentsSchema, isoDateSchema, mobileSchema, requiredText } from "./validation.js";
-import { AssistantServiceError, openAiProvider, type LlmProvider, type LlmTool } from "./llm.js";
+import {
+  AssistantServiceError,
+  openAiProvider,
+  type LlmProvider,
+  type LlmTool,
+  type LlmToolCall,
+} from "./llm.js";
 import { saoPauloDateISO } from "./dates.js";
 import { formatBRL } from "./format.js";
 import type { DefaultDueDays, DerivedStatus } from "./types.js";
@@ -164,6 +170,12 @@ function instructions(today: string): string {
 
 function normalizedName(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function standaloneWhatsapp(message: string): string | null {
+  if (!/^[\d\s()+.-]+$/.test(message)) return null;
+  const parsed = mobileSchema.safeParse(message);
+  return parsed.success ? parsed.data : null;
 }
 
 function validText(value: string | null, label: string, min: number, max: number): string | null {
@@ -372,16 +384,34 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
   const today = saoPauloDateISO(input.now ?? new Date());
   const llm = input.llm ?? openAiProvider;
 
-  const call = await llm.interpret({
-    apiKey: input.apiKey,
-    model: input.model,
-    providerId: input.providerId,
-    instructions: instructions(today),
-    tools: ALL_TOOLS,
-    message: input.message,
-    timeoutMs: input.timeoutMs,
-    fetchImpl: input.fetchImpl,
-  });
+  // Uma resposta contendo só o telefone é inequívoca durante o preenchimento e
+  // não precisa voltar ao classificador stateless, que não conhece o rascunho.
+  const phoneReply = standaloneWhatsapp(input.message);
+  const phoneReplyPending = phoneReply && input.memory
+    ? await input.memory.load(input.providerId)
+    : null;
+
+  const call: LlmToolCall = phoneReply && phoneReplyPending
+    ? {
+        name: "preparar_cobranca",
+        arguments: {
+          clientName: null,
+          clientWhatsapp: phoneReply,
+          description: null,
+          amountCents: null,
+          dueDate: null,
+        },
+      }
+    : await llm.interpret({
+        apiKey: input.apiKey,
+        model: input.model,
+        providerId: input.providerId,
+        instructions: instructions(today),
+        tools: ALL_TOOLS,
+        message: input.message,
+        timeoutMs: input.timeoutMs,
+        fetchImpl: input.fetchImpl,
+      });
 
   // Qualquer intenção que não seja cobrança encerra um preenchimento em
   // andamento: o prestador mudou de assunto e o rascunho parcial não deve
@@ -394,7 +424,9 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
     case "preparar_cobranca": {
       const extracted = extractedChargeSchema.safeParse(call.arguments);
       if (!extracted.success) throw new AssistantServiceError("Campos inválidos do assistente");
-      const pending = input.memory ? await input.memory.load(input.providerId) : null;
+      const pending = phoneReplyPending ?? (input.memory
+        ? await input.memory.load(input.providerId)
+        : null);
       const merged = mergeCharge(pending, extracted.data);
       const clients = await input.deps.listClients(input.providerId);
       const defaultDueDate = addDaysISO(today, input.defaultDueDays ?? 0);

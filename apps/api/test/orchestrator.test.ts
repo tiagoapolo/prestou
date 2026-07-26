@@ -193,17 +193,10 @@ test("cobrança retoma o rascunho pendente na mensagem seguinte", async () => {
   // 2) Só o telefone → mescla com o parcial e fecha o rascunho.
   const second = await interpretMessage({
     ...base,
-    message: "+55 41 997888888",
-    llm: fixedLlm({
-      name: "preparar_cobranca",
-      arguments: {
-        clientName: null,
-        clientWhatsapp: "+55 41 997888888",
-        description: null,
-        amountCents: null,
-        dueDate: null,
-      },
-    }),
+    message: "41997888888",
+    llm: { interpret: async () => {
+      throw new Error("telefone isolado não deve voltar ao classificador");
+    } },
   });
   assert.equal(second.kind, "draft");
   if (second.kind !== "draft") return;
