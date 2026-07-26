@@ -122,6 +122,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function magicLinkError(error: AuthError): UserFacingError {
   console.error("Magic link sign-in failed", error);
+  if (error.code === "otp_disabled") {
+    return new UserFacingError(
+      "O Prestou está disponível apenas para pessoas convidadas. Se você já concluiu seu cadastro, confira o e-mail informado. Caso contrário, abra o link de convite recebido no WhatsApp.",
+    );
+  }
   if (error.status === 429 || error.code === "over_email_send_rate_limit" || error.code === "over_request_rate_limit") {
     return new UserFacingError("Você solicitou links demais. Aguarde alguns minutos e tente novamente.");
   }
