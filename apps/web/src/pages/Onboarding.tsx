@@ -1,22 +1,34 @@
-import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { api } from "../api";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { api, publicApi } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNotice } from "../components";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatMobile, isValidMobile, normalizeMobile } from "../formats";
 import { CityAutocomplete } from "../components/CityAutocomplete";
 import { userMessage } from "../errors";
 
 export function OnboardingPage() {
   const { refreshProvider } = useAuth();
+  const [searchParams] = useSearchParams();
+  const onboardingToken = searchParams.get("token") ?? "";
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [whatsapp, setWhatsapp] = useState("");
+  const [phoneMasked, setPhoneMasked] = useState("");
   const [consent, setConsent] = useState(false);
+
+  useEffect(() => {
+    if (!onboardingToken) {
+      setError("Abra o link de cadastro recebido no WhatsApp.");
+      return;
+    }
+    publicApi<{ phoneMasked: string }>(
+      `/public/whatsapp-onboarding/${encodeURIComponent(onboardingToken)}`,
+    ).then((result) => setPhoneMasked(result.phoneMasked))
+      .catch((cause) => setError(userMessage(cause, "Este convite é inválido ou expirou.")));
+  }, [onboardingToken]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,8 +46,8 @@ export function OnboardingPage() {
       setBusy(false);
       return;
     }
-    if (!isValidMobile(whatsapp)) {
-      setError("Informe um celular válido com DDD");
+    if (!onboardingToken || !phoneMasked) {
+      setError("Abra novamente o link válido recebido no WhatsApp.");
       setBusy(false);
       return;
     }
@@ -54,7 +66,7 @@ export function OnboardingPage() {
         method: "POST",
         body: JSON.stringify({
           name, profession,
-          whatsapp: normalizeMobile(whatsapp), pixKey,
+          onboardingToken, pixKey,
           municipality: city ? { name: city, state, ibgeCode: municipalityCode } : undefined,
           consent,
         }),
@@ -74,7 +86,7 @@ export function OnboardingPage() {
         <form onSubmit={submit} className="stack">
           <Label>Seu nome<Input name="name" required minLength={2} autoComplete="name" /></Label>
           <Label>Profissão<Input name="profession" required minLength={2} placeholder="Jardinagem, consultas…" /></Label>
-          <Label>Seu WhatsApp<Input name="whatsapp" required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={whatsapp} onChange={(event) => setWhatsapp(formatMobile(event.target.value))} maxLength={15} pattern="\([1-9][0-9]\) 9[0-9]{4}-[0-9]{4}" title="Informe um celular válido com DDD" /></Label>
+          <p>WhatsApp validado: <strong>{phoneMasked || "Carregando…"}</strong></p>
           <Label>Chave Pix<Input name="pixKey" required placeholder="CPF, celular, e-mail ou aleatória" /></Label>
           <Label>Cidade/município <span className="optional">opcional</span><CityAutocomplete /></Label>
           <Label className="check-row"><Checkbox name="consent" required checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} /> <span>Li a <Link className="legal-link" to="/privacidade" target="_blank">Política de Privacidade</Link> e concordo com o uso destes dados para criar e acompanhar minhas cobranças.</span></Label>

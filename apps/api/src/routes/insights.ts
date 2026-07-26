@@ -5,6 +5,7 @@ import { funnel, track, type EventType } from "../analytics.js";
 import { runReminders } from "../reminders.js";
 import { config } from "../config.js";
 import { purgeExpiredReceipts } from "../retention.js";
+import { purgeExpiredWhatsAppOnboarding } from "../whatsapp-onboarding.js";
 
 const eventSchema = z.object({
   type: z.enum([
@@ -70,5 +71,13 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: "Cron não autorizado" });
     }
     return reply.send(await purgeExpiredReceipts());
+  });
+
+  /** Expurgo de sessões e identidades Auth provisórias abandonadas. */
+  app.post("/api/internal/run-whatsapp-onboarding-retention", async (req, reply) => {
+    if (!cronAuthorized(req.headers.authorization)) {
+      return reply.code(401).send({ error: "Cron não autorizado" });
+    }
+    return reply.send(await purgeExpiredWhatsAppOnboarding());
   });
 }

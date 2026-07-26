@@ -14,11 +14,50 @@ import { financialRoutes } from "./routes/financial.js";
 import { runReminders } from "./reminders.js";
 import { closeDatabase } from "./db.js";
 import { publicErrorMessage } from "./public-errors.js";
+import {
+  purgeExpiredWhatsAppOnboarding,
+  whatsappOnboardingRoutes,
+} from "./whatsapp-onboarding.js";
+
+function safeRequestUrl(url = ""): string {
+  return url.replace(
+    /\/public\/whatsapp-onboarding\/[A-Za-z0-9_-]{43}/g,
+    "/public/whatsapp-onboarding/[REDACTED]",
+  );
+}
+
+function assertRuntimeConfiguration(): void {
+  if (config.nodeEnv !== "production") return;
+  if (config.whatsapp.mode !== "cloud-api") {
+    throw new Error("WHATSAPP_MODE=cloud-api é obrigatório em produção");
+  }
+  if (!config.whatsapp.phoneNumberId || !config.whatsapp.accessToken) {
+    throw new Error("Credenciais da Cloud API são obrigatórias em produção");
+  }
+  if (!config.whatsapp.verifyToken || !config.whatsapp.appSecret) {
+    throw new Error("Assinatura e verificação do webhook são obrigatórias em produção");
+  }
+  if (!config.whatsapp.authTemplate) {
+    throw new Error("WHATSAPP_AUTH_TEMPLATE é obrigatório em produção");
+  }
+  if (config.whatsapp.signup.enabled && !config.whatsapp.signup.turnstileSecret) {
+    throw new Error("TURNSTILE_SECRET_KEY é obrigatória com cadastro por WhatsApp");
+  }
+}
 
 export async function buildServer() {
+  assertRuntimeConfiguration();
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? "info",
+      serializers: {
+        req(request) {
+          return {
+            method: request.method,
+            url: safeRequestUrl(request.url),
+          };
+        },
+      },
       transport:
         process.env.NODE_ENV === "production"
           ? undefined
@@ -46,6 +85,7 @@ export async function buildServer() {
   await app.register(actionProposalRoutes);
   await app.register(assistantRoutes);
   await app.register(whatsappSettingsRoutes);
+  await app.register(whatsappOnboardingRoutes);
   await app.register(whatsappWebhookRoutes);
 
   app.setNotFoundHandler((_req, reply) => {
@@ -57,7 +97,7 @@ export async function buildServer() {
       ? error.statusCode
       : 500;
     const statusCode = reportedStatus >= 400 && reportedStatus < 500 ? reportedStatus : 500;
-    const logContext = { err: error, method: req.method, url: req.url };
+    const logContext = { err: error, method: req.method, url: safeRequestUrl(req.url) };
     if (statusCode >= 500) req.log.error(logContext, "request failed");
     else req.log.warn(logContext, "request rejected");
 
@@ -90,6 +130,14 @@ if (isMain) {
       setInterval(
         () => {
           runReminders().catch((err) => app.log.error({ err }, "reminders failed"));
+        },
+        60 * 60 * 1000,
+      ).unref();
+      setInterval(
+        () => {
+          purgeExpiredWhatsAppOnboarding().catch((err) =>
+            app.log.error({ err }, "whatsapp onboarding retention failed")
+          );
         },
         60 * 60 * 1000,
       ).unref();

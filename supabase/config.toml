@@ -11,10 +11,14 @@ major_version = 17
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/auth/callback"]
-enable_signup = true
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "http://localhost:3000/cadastro",
+]
+# Contas novas são criadas server-side somente após convite, webhook assinado e
+# CAPTCHA. Login por magic link continua disponível para usuários existentes.
+enable_signup = false
 
 [storage]
 enabled = true
 file_size_limit = "10MiB"
-

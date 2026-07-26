@@ -9,6 +9,7 @@ import {
   verifySignature,
   whatsappChargeActionId,
   whatsappIdentityCandidates,
+  nationalWhatsAppIdentityCandidates,
 } from "../src/channels/whatsapp.ts";
 
 const secret = "app-secret";
@@ -92,6 +93,13 @@ test("whatsappIdentityCandidates considera o nono dígito brasileiro", () => {
   assert.deepEqual(
     whatsappIdentityCandidates("15551234567"),
     ["15551234567", "15551234567"],
+  );
+});
+
+test("nationalWhatsAppIdentityCandidates remove somente o código do país", () => {
+  assert.deepEqual(
+    nationalWhatsAppIdentityCandidates("5555998765432"),
+    ["55998765432", "5598765432"],
   );
 });
 

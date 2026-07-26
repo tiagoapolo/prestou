@@ -1,12 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { parsePixKey } from "@prestou/pix";
-import { execute, queryOne } from "../db.js";
+import { execute, queryOne, withTransaction } from "../db.js";
 import { newId } from "../ids.js";
-import { requireAuthUser, requireProvider } from "../auth.js";
+import { isAppAdmin, requireAuthUser, requireProvider } from "../auth.js";
 import type { ProviderRow } from "../types.js";
-import { mobileSchema, requiredText, validationMessage } from "../validation.js";
+import { requiredText, validationMessage } from "../validation.js";
 import { loadMunicipalities, municipalityExists, searchMunicipalities } from "../municipalities.js";
+import {
+  consumeLockedOnboarding,
+  lockOnboardingForProvider,
+} from "../whatsapp-onboarding.js";
 
 const municipalitySchema = z.object({
   name: requiredText("Cidade/município", 2, 60),
@@ -17,7 +21,7 @@ const municipalitySchema = z.object({
 const createProviderSchema = z.object({
   name: requiredText("Nome", 2, 80),
   profession: requiredText("Profissão", 2, 60),
-  whatsapp: mobileSchema,
+  onboardingToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/, "Convite inválido"),
   pixKey: requiredText("Chave Pix", 3, 80),
   municipality: municipalitySchema.optional(),
   photoUrl: z.string().url().max(500).optional(),
@@ -25,17 +29,18 @@ const createProviderSchema = z.object({
   consent: z.literal(true, {
     errorMap: () => ({ message: "Consentimento é obrigatório" }),
   }),
-});
+}).strict();
 
+// O número de WhatsApp não é editável aqui: ele só muda por verificação
+// (start/confirm em /api/whatsapp/number), para nunca divergir do número provado.
 const updateSettingsSchema = z.object({
-  whatsapp: mobileSchema,
   pixKey: requiredText("Chave Pix", 3, 80),
   defaultDueDays: z.union([
     z.literal(0), z.literal(1), z.literal(5), z.literal(15), z.literal(30),
   ]).optional(),
-});
+}).strict();
 
-function publicProvider(p: ProviderRow) {
+function publicProvider(p: ProviderRow, admin = false) {
   return {
     id: p.id,
     name: p.name,
@@ -49,6 +54,7 @@ function publicProvider(p: ProviderRow) {
     pixKeyMasked: maskKey(p.pix_key),
     whatsapp: p.whatsapp,
     defaultDueDays: p.default_due_days,
+    admin,
     createdAt: p.created_at,
   };
 }
@@ -120,38 +126,67 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send({ error: "Onboarding já concluído" });
     }
 
-    await execute(
-      `INSERT INTO providers (id, auth_user_id, email, name, profession, photo_url, city, state, municipality_code, pix_key, pix_key_type, whatsapp, consent_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id,
-      req.authUser!.id,
-      req.authUser!.email,
-      body.name,
-      body.profession,
-      body.photoUrl ?? null,
-      body.municipality?.name ?? null,
-      body.municipality?.state ?? null,
-      body.municipality?.ibgeCode ?? null,
-      keyInfo.normalized,
-      keyInfo.type,
-      body.whatsapp,
-      now,
-      now,
-    );
+    try {
+      await withTransaction(async (tx) => {
+        const onboarding = await lockOnboardingForProvider(
+          tx,
+          body.onboardingToken,
+          req.authUser!.id,
+        );
+        if (!onboarding) {
+          const error = new Error("Convite inválido ou expirado.") as Error & { statusCode: number };
+          error.statusCode = 409;
+          throw error;
+        }
+        await tx.execute(
+          `INSERT INTO providers
+             (id, auth_user_id, email, name, profession, photo_url, city, state,
+              municipality_code, pix_key, pix_key_type, whatsapp,
+              whatsapp_verified_at, consent_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id,
+          req.authUser!.id,
+          req.authUser!.email,
+          body.name,
+          body.profession,
+          body.photoUrl ?? null,
+          body.municipality?.name ?? null,
+          body.municipality?.state ?? null,
+          body.municipality?.ibgeCode ?? null,
+          keyInfo.normalized,
+          keyInfo.type,
+          onboarding.phone,
+          onboarding.phoneVerifiedAt,
+          now,
+          now,
+        );
+        await consumeLockedOnboarding(tx, onboarding);
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        return reply.code(409).send({ error: "Este WhatsApp já possui uma conta Prestou." });
+      }
+      if ((error as { statusCode?: number }).statusCode === 409) {
+        return reply.code(409).send({ error: "Convite inválido, expirado ou já utilizado." });
+      }
+      throw error;
+    }
 
     const provider = (await queryOne<ProviderRow>(
       "SELECT * FROM providers WHERE id = ?",
       id,
     ))!;
     return reply.code(201).send({
-      provider: publicProvider(provider),
+      provider: publicProvider(provider, await isAppAdmin(req.authUser!.id)),
     });
     },
   );
 
   /** Prestador autenticado (usado pelo painel para render do cabeçalho). */
   app.get("/api/providers/me", { preHandler: requireProvider }, async (req) => {
-    return { provider: publicProvider(req.provider!) };
+    return {
+      provider: publicProvider(req.provider!, await isAppAdmin(req.authUser!.id)),
+    };
   });
 
   app.get("/api/providers/me/settings", { preHandler: requireProvider }, async (req) => {
@@ -187,11 +222,10 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
 
     await execute(
       `UPDATE providers
-       SET pix_key = ?, pix_key_type = ?, whatsapp = ?, default_due_days = ?
+       SET pix_key = ?, pix_key_type = ?, default_due_days = ?
        WHERE id = ?`,
       keyInfo.normalized,
       keyInfo.type,
-      parsed.data.whatsapp,
       defaultDueDays,
       req.provider!.id,
     );
@@ -199,7 +233,7 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
     return {
       settings: {
         pixKey: keyInfo.normalized,
-        whatsapp: parsed.data.whatsapp,
+        whatsapp: req.provider!.whatsapp,
         defaultDueDays,
       },
     };
