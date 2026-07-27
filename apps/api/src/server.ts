@@ -11,6 +11,7 @@ import { actionProposalRoutes } from "./routes/action-proposals.js";
 import { assistantRoutes } from "./routes/assistant.js";
 import { whatsappSettingsRoutes, whatsappWebhookRoutes } from "./routes/whatsapp.js";
 import { financialRoutes } from "./routes/financial.js";
+import { adminRoutes } from "./routes/admin.js";
 import { runReminders } from "./reminders.js";
 import { closeDatabase } from "./db.js";
 import { publicErrorMessage } from "./public-errors.js";
@@ -80,6 +81,7 @@ export async function buildServer() {
   await app.register(chargeRoutes);
   await app.register(paymentRoutes);
   await app.register(financialRoutes);
+  await app.register(adminRoutes);
   await app.register(publicRoutes);
   await app.register(insightRoutes);
   await app.register(actionProposalRoutes);

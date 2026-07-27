@@ -27,6 +27,15 @@ describe("página de administração", () => {
   beforeEach(() => {
     mockApi.mockReset();
     authState.admin = true;
+    mockApi.mockImplementation(<T,>(path: string): Promise<T> => {
+      if (path === "/api/admin/providers") {
+        return Promise.resolve({ providers: [], nextCursor: null } as T);
+      }
+      if (path === "/api/admin/whatsapp-invites") {
+        return Promise.resolve({ invites: [] } as T);
+      }
+      return Promise.reject(new Error(`Request inesperado: ${path}`));
+    });
   });
   afterEach(cleanup);
 
@@ -41,6 +50,9 @@ describe("página de administração", () => {
   it("permite ao administrador criar e revogar um convite", async () => {
     let invites: Array<{ id: string; phone: string; status: string; expires_at: string }> = [];
     mockApi.mockImplementation(<T,>(path: string, init?: RequestInit): Promise<T> => {
+      if (path === "/api/admin/providers") {
+        return Promise.resolve({ providers: [], nextCursor: null } as T);
+      }
       if (path === "/api/admin/whatsapp-invites") {
         if (init?.method === "POST") {
           const phone = JSON.parse(String(init.body ?? "{}")).phone as string;
@@ -84,5 +96,42 @@ describe("página de administração", () => {
       { method: "POST" },
     ));
     expect(await screen.findByText("revoked")).toBeTruthy();
+  });
+
+  it("lista e busca usuários registrados", async () => {
+    mockApi.mockImplementation(<T,>(path: string): Promise<T> => {
+      if (path === "/api/admin/whatsapp-invites") {
+        return Promise.resolve({ invites: [] } as T);
+      }
+      if (path === "/api/admin/providers") {
+        return Promise.resolve({
+          providers: [{
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "João Jardineiro",
+            email: "joao@example.com",
+            whatsapp: "11976543210",
+            profession: "Jardinagem",
+            city: "São Paulo",
+            state: "SP",
+            createdAt: "2026-07-27T12:00:00.000Z",
+          }],
+          nextCursor: null,
+        } as T);
+      }
+      if (path === "/api/admin/providers?q=maria") {
+        return Promise.resolve({ providers: [], nextCursor: null } as T);
+      }
+      return Promise.reject(new Error(`Request inesperado: ${path}`));
+    });
+    renderPage();
+
+    expect(await screen.findByRole("table", { name: "Usuários registrados" })).toBeTruthy();
+    expect(screen.getByText("João Jardineiro")).toBeTruthy();
+    expect(screen.getByText("(11) 97654-3210")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Buscar usuários"), { target: { value: " maria " } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(mockApi).toHaveBeenCalledWith("/api/admin/providers?q=maria"));
+    expect(await screen.findByText("Nenhum usuário encontrado.")).toBeTruthy();
   });
 });

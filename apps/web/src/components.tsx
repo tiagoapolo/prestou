@@ -1,5 +1,5 @@
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import { userMessage } from "./errors";
 import { LoaderCircle, Settings, Shield, WalletCards } from "lucide-react";
@@ -35,6 +35,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
 
 export function AppShell() {
   const { provider, signOut } = useAuth();
+  const wide = useLocation().pathname.startsWith("/admin");
   const [error, setError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   async function handleSignOut() {
@@ -49,7 +50,7 @@ export function AppShell() {
   }
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <header className={`topbar${wide ? " topbar--wide" : ""}`}>
         <Link to="/" className="brand">prestou<span>.</span></Link>
         <div className="topbar-actions">
           <Button asChild variant="ghost" size="sm"><NavLink to="/financeiro" className={({ isActive }) => `topbar-nav${isActive ? " active" : ""}`}><WalletCards aria-hidden="true" />Financeiro</NavLink></Button>
@@ -59,7 +60,7 @@ export function AppShell() {
         </div>
       </header>
       {error && <div className="shell-error"><ErrorNotice message={error} /></div>}
-      <main className="app-content"><Outlet /></main>
+      <main className={`app-content${wide ? " app-content--wide" : ""}`}><Outlet /></main>
     </div>
   );
 }

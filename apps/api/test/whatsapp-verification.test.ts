@@ -371,6 +371,38 @@ test("administrador cria, lista e revoga convite para um número", async () => {
   assert.equal(revoked.json().revoked, true);
 });
 
+test("somente administrador lista prestadores registrados", async () => {
+  const viewer = await createProvider("provider-list-admin", "11930000011");
+
+  const forbidden = await app.inject({
+    method: "GET",
+    url: "/api/admin/providers",
+    headers: authHeader(viewer.token),
+  });
+  assert.equal(forbidden.statusCode, 403);
+
+  const authUser = await queryOne<{ auth_user_id: string }>(
+    "SELECT auth_user_id FROM providers WHERE id = ?",
+    viewer.id,
+  );
+  assert.ok(authUser);
+  await execute(
+    "INSERT INTO private.app_admins (auth_user_id) VALUES (?) ON CONFLICT DO NOTHING",
+    authUser!.auth_user_id,
+  );
+
+  const listed = await app.inject({
+    method: "GET",
+    url: "/api/admin/providers?q=provider-list-admin",
+    headers: authHeader(viewer.token),
+  });
+  assert.equal(listed.statusCode, 200);
+  assert.equal(listed.json().providers.length, 1);
+  assert.equal(listed.json().providers[0].name, "Prestador provider-list-admin");
+  assert.equal(listed.json().providers[0].whatsapp, "11930000011");
+  assert.equal(listed.json().nextCursor, null);
+});
+
 test("retenção remove somente usuário Auth provisório abandonado", async () => {
   const created = await admin.auth.admin.createUser({
     email: `prestou-abandoned-${crypto.randomUUID()}@example.com`,
