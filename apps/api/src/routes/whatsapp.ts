@@ -29,6 +29,11 @@ import {
 } from "../whatsapp-guardrail.js";
 import { whatsappGuardrailReply } from "../whatsapp-guardrail-policy.js";
 import {
+  assertWhatsAppServiceWindowOpen,
+  getWhatsAppServiceWindow,
+  recordWhatsAppInbound,
+} from "../whatsapp-service-window.js";
+import {
   invalidateOnboardingToken,
   invitedSignupMessage,
   startInvitedWhatsAppOnboarding,
@@ -219,6 +224,7 @@ export async function whatsappSettingsRoutes(app: FastifyInstance): Promise<void
       phone: provider.whatsapp,
       verified: Boolean(provider.whatsapp_verified_at),
       pendingCandidate: pending?.candidate_phone ?? null,
+      serviceWindow: await getWhatsAppServiceWindow(toE164(provider.whatsapp)),
     };
   });
 
@@ -424,6 +430,10 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
     // recebimento e tratamos o conteúdo de forma best-effort.
     const inbound = parseInboundMessage(req.body);
     if (inbound) {
+      await recordWhatsAppInbound(
+        inbound.from,
+        inbound.receivedAt ? new Date(inbound.receivedAt) : new Date(),
+      );
       const identityCandidates = nationalWhatsAppIdentityCandidates(inbound.from);
       const providers = await queryAll<ProviderRow>(
         `SELECT * FROM providers
@@ -581,6 +591,16 @@ async function deliverPayload(
     log.error(error.message);
     if (required) throw error;
     return;
+  }
+  const message = payload as { to?: unknown; type?: unknown };
+  if (message.type !== "template" && typeof message.to === "string") {
+    try {
+      await assertWhatsAppServiceWindowOpen(message.to);
+    } catch (error) {
+      log.error({ err: error, to: message.to }, "[whatsapp:cloud-api] janela encerrada");
+      if (required) throw error;
+      return;
+    }
   }
   const res = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
     method: "POST",

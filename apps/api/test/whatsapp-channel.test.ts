@@ -33,7 +33,7 @@ test("parseInboundMessage extrai a primeira mensagem de texto", () => {
     entry: [{
       changes: [{
         value: {
-          messages: [{ id: "wamid.text-1", from: "5511988887777", type: "text", text: { body: "  quem me deve?  " } }],
+          messages: [{ id: "wamid.text-1", from: "5511988887777", timestamp: "1785168000", type: "text", text: { body: "  quem me deve?  " } }],
         },
       }],
     }],
@@ -41,6 +41,7 @@ test("parseInboundMessage extrai a primeira mensagem de texto", () => {
   assert.deepEqual(parseInboundMessage(payload), {
     id: "wamid.text-1",
     from: "5511988887777",
+    receivedAt: "2026-07-27T16:00:00.000Z",
     kind: "text",
     text: "quem me deve?",
   });

@@ -25,6 +25,11 @@ interface WhatsappNumberStatus {
   verified: boolean;
   /** Número aguardando confirmação de código, se houver. */
   pendingCandidate: string | null;
+  serviceWindow: {
+    isOpen: boolean;
+    lastInboundAt: string | null;
+    expiresAt: string | null;
+  };
 }
 
 export function SettingsPage() {
@@ -194,6 +199,22 @@ export function SettingsPage() {
             Este é o número que recebe as notificações e conversa com o assistente.
             Ele só muda depois de confirmar o código enviado ao número novo.
           </p>
+
+          {!verificationLoading && numberStatus && (
+            <p className="settings-help" role="status">
+              <strong>
+                {numberStatus.serviceWindow.isOpen
+                  ? "Janela de atendimento aberta"
+                  : "Janela de atendimento fechada"}
+              </strong>
+              {numberStatus.serviceWindow.isOpen && numberStatus.serviceWindow.expiresAt
+                ? ` até ${new Date(numberStatus.serviceWindow.expiresAt).toLocaleString("pt-BR", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}`
+                : ". Envie um template aprovado ou aguarde uma nova mensagem desse número."}
+            </p>
+          )}
 
           {verificationLoading && <Spinner label="Carregando vínculo do WhatsApp…" />}
 
