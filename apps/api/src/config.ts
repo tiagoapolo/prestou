@@ -66,6 +66,7 @@ export const config = {
     verificationSecret: env("WHATSAPP_VERIFICATION_SECRET"),
     signup: {
       enabled: booleanEnv("WHATSAPP_SIGNUP_ENABLED", false),
+      template: env("WHATSAPP_SIGNUP_TEMPLATE", "convite_prestador"),
       onboardingSecret: env("WHATSAPP_ONBOARDING_SECRET"),
       turnstileSecret: env("TURNSTILE_SECRET_KEY"),
       sessionTtlMinutes: positiveIntegerEnv("WHATSAPP_ONBOARDING_SESSION_TTL_MINUTES", 24 * 60),

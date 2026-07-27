@@ -1,6 +1,7 @@
 ---
 title: "ADR-001 — Arquitetura híbrida Supabase + Railway"
 created: 2026-07-19
+updated: 2026-07-26
 status: aceita
 tags:
   - prestou
@@ -10,6 +11,7 @@ tags:
 relacionado:
   - "[[Prestou - Plano de Execução do MVP]]"
   - "[[Prestou - MVP]]"
+  - "[[ADR-009 - Assistente do prestador no WhatsApp (WhatsApp-first)]]"
 ---
 
 # ADR-001 — Arquitetura híbrida Supabase + Railway
@@ -20,7 +22,8 @@ Usar uma arquitetura híbrida no MVP:
 
 - **Supabase:** autenticação dos prestadores, PostgreSQL e Storage privado dos comprovantes.
 - **Railway:** API Fastify, site mobile e execução agendada dos lembretes.
-- **Meta Cloud API:** envio unidirecional de notificações WhatsApp ao prestador.
+- **Meta Cloud API:** convites e notificações outbound, mais webhook inbound
+  assinado para onboarding e assistente do prestador.
 
 Decisão aprovada por Fonseca em 19 de julho de 2026.
 
@@ -57,7 +60,7 @@ O MVP deve minimizar trabalho de infraestrutura que não testa a hipótese de pr
 | Supabase PostgreSQL | Persistência transacional e auditoria |
 | Supabase Storage | Comprovantes privados, com retenção e acesso temporário |
 | Railway | Hospedagem da API/site mobile e cron de lembretes |
-| Meta Cloud API | Notificação Prestou → prestador |
+| Meta Cloud API | Templates/notificações outbound e webhook inbound assinado |
 
 ## Regras de segurança
 
@@ -71,6 +74,12 @@ O MVP deve minimizar trabalho de infraestrutura que não testa a hipótese de pr
 ## Implementação
 
 O schema PostgreSQL, a validação JWT, o Storage privado e o site mobile foram implementados. Em 20 de julho de 2026, o fallback SQLite também foi removido; ver [[ADR-005 - Supabase como ambiente único de dados]].
+
+Em 22 de julho de 2026, a integração Meta evoluiu de unidirecional para
+bidirecional conforme o [[ADR-009 - Assistente do prestador no WhatsApp (WhatsApp-first)]].
+Em 26 de julho de 2026, a criação de convite passou a enviar
+o template `convite_prestador`; a posse do número continua dependendo do inbound
+assinado subsequente.
 
 ## Decisões pendentes
 

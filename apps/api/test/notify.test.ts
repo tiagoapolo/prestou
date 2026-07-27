@@ -71,3 +71,28 @@ test("monta template de cobrança vencida com três campos e botão de URL", () 
     },
   ]);
 });
+
+test("monta template de convite com botão de resposta rápida", () => {
+  const payload = buildWhatsAppTemplatePayload({
+    to: "5511988887777",
+    name: "convite_prestador",
+    language: "pt_BR",
+    quickReplyButtonPayload: "signup:confirm",
+  });
+
+  assert.deepEqual(payload, {
+    messaging_product: "whatsapp",
+    to: "5511988887777",
+    type: "template",
+    template: {
+      name: "convite_prestador",
+      language: { code: "pt_BR" },
+      components: [{
+        type: "button",
+        sub_type: "quick_reply",
+        index: "0",
+        parameters: [{ type: "payload", payload: "signup:confirm" }],
+      }],
+    },
+  });
+});

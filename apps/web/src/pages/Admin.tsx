@@ -86,7 +86,8 @@ export function AdminPage() {
           <div><p className="eyebrow">Piloto</p><h2>Convites por WhatsApp</h2></div>
         </div>
         <p className="settings-help">
-          O convite é ativado somente quando o próprio número conversa com o WhatsApp do Prestou.
+          Ao criar o convite, o Prestou envia uma mensagem para o número informado. O cadastro
+          só é ativado quando o próprio número responde ou toca em “Confirmar cadastro”.
         </p>
         <form onSubmit={createInvite} className="stack">
           <Label>Número convidado<Input required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={invitePhone} onChange={(event) => setInvitePhone(formatMobile(event.target.value))} maxLength={15} /></Label>

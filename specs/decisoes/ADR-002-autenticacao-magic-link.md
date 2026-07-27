@@ -1,6 +1,7 @@
 ---
 title: "ADR-002 — Autenticação por magic link"
 created: 2026-07-19
+updated: 2026-07-26
 status: aceita
 tags:
   - prestou
@@ -9,6 +10,7 @@ tags:
   - adr
 relacionado:
   - "[[ADR-001 - Arquitetura híbrida Supabase + Railway]]"
+  - "[[Fluxo de cadastro, convite e autenticação do prestador]]"
 ---
 
 # ADR-002 — Autenticação por magic link
@@ -36,13 +38,18 @@ Decisão aprovada por Fonseca em 19 de julho de 2026.
 
 ## Fluxo
 
-1. No onboarding assistido, o prestador informa e-mail e demais dados do perfil.
-2. O operador cria/convida a identidade no Supabase Auth e associa seu ID ao perfil.
-3. O prestador informa o e-mail na PWA.
-4. Supabase envia o magic link.
-5. O link retorna à PWA, que obtém a sessão.
-6. A PWA chama a API com `Authorization: Bearer <access_token>`.
-7. A API valida o token e resolve o prestador por `auth_user_id`.
+1. O administrador cria o convite por WhatsApp e a API envia o template
+   `convite_prestador`.
+2. O próprio número responde ou toca no botão; o inbound assinado comprova o
+   WhatsApp e libera um link temporário de cadastro.
+3. No link, o prestador informa o e-mail e passa pelo CAPTCHA.
+4. A API cria ou reutiliza uma identidade Supabase ainda sem `provider` e a
+   vincula à sessão de onboarding.
+5. O navegador solicita o magic link com `shouldCreateUser: false`.
+6. Supabase envia o magic link; ao abri-lo, a PWA obtém a sessão confirmada.
+7. O prestador informa perfil, chave Pix e consentimento.
+8. A API valida o JWT, trava convite/sessão/token e cria o `provider` na mesma
+   transação que consome o onboarding.
 
 ## Segurança e privacidade
 
@@ -59,4 +66,3 @@ Decisão aprovada por Fonseca em 19 de julho de 2026.
 - Token ausente, expirado ou inválido recebe `401`.
 - Usuário Supabase válido sem perfil Prestou recebe `403` com orientação de onboarding.
 - Um prestador não acessa cobranças ou comprovantes de outro.
-

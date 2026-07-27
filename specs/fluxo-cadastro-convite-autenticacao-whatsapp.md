@@ -1,6 +1,7 @@
 ---
 title: "Fluxo de cadastro, convite e autenticação do prestador"
 created: 2026-07-24
+updated: 2026-07-26
 status: implementação revisada
 tags:
   - prestou
@@ -19,7 +20,8 @@ tags:
 Este documento descreve o fluxo implementado para:
 
 1. um administrador convidar um número de WhatsApp;
-2. o próprio número comprovar sua posse conversando com o WhatsApp do Prestou;
+2. o Prestou enviar o template `convite_prestador` e o próprio número comprovar
+   sua posse respondendo ou tocando no botão;
 3. o prestador criar e confirmar sua identidade web por magic link;
 4. a API criar o `provider` com o WhatsApp já validado;
 5. um prestador autenticado trocar posteriormente seu número por OTP.
@@ -67,7 +69,7 @@ flowchart LR
     BROWSER -->|"Magic link / PKCE"| AUTH["Supabase Auth"]
     API -->|"Service role somente no servidor"| AUTH
     API -->|"Conexão server-side"| DB[("PostgreSQL / Supabase")]
-    API -->|"Link dentro da janela de atendimento"| META
+    API -->|"Template de convite e respostas na janela"| META
 
     classDef trusted fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
     classDef external fill:#fff3e0,stroke:#ef6c00,color:#e65100
@@ -84,7 +86,8 @@ O navegador nunca recebe `SUPABASE_SERVICE_ROLE_KEY`,
 ```mermaid
 stateDiagram-v2
     [*] --> SemConvite
-    SemConvite --> Convidado: administrador cria convite
+    SemConvite --> Convidado: admin cria e Meta aceita o template
+    SemConvite --> Revogado: Meta rejeita o template
     Convidado --> Revogado: administrador revoga ou convite expira
     Convidado --> Reivindicado: inbound assinado do mesmo número
     Reivindicado --> LinkAtivo: sessão e token são criados
@@ -103,7 +106,7 @@ Estados persistidos do convite:
 
 | Estado | Significado |
 | --- | --- |
-| `pending` | Convite criado, aguardando inbound do mesmo número |
+| `pending` | Template aceito pela Meta, aguardando inbound do mesmo número |
 | `claimed` | O número falou com o Prestou e a sessão foi criada |
 | `consumed` | O `provider` foi criado na mesma transação que consumiu o convite |
 | `revoked` | Convite cancelado ou expirado por manutenção oportunista |
@@ -149,8 +152,11 @@ Regras:
 - convite expirado anterior do mesmo número é revogado antes da nova inserção;
 - `created_by` recebe o `auth.users.id` do administrador.
 
-O convite é uma **allowlist**. Criá-lo não envia mensagem outbound. O
-administrador deve orientar o convidado a conversar com o WhatsApp do Prestou.
+O convite é uma **allowlist** e dispara o template Meta `convite_prestador` para
+o número informado. O recebimento do template não prova posse: o convite só é
+reivindicado quando o próprio número responde “Oi”/“Sim” ou toca no botão de
+quick reply “Confirmar cadastro”. Se a entrega falhar, o convite recém-criado é
+revogado e o administrador recebe erro para poder tentar novamente.
 
 ## 1.3 Administração
 
@@ -180,11 +186,17 @@ sequenceDiagram
     API->>API: Valida JWT, e-mail confirmado e app_admins
     API->>DB: Verifica provider e convite ativo
     API->>DB: INSERT convite pending
-    API-->>Web: 201 Created
+    API->>Meta: Envia template convite_prestador
+    alt Meta aceita o template
+        Meta-->>Phone: Convite + botão Confirmar cadastro
+        API-->>Web: 201 Created
+    else Meta rejeita a entrega
+        API->>DB: UPDATE convite revoked
+        API-->>Web: 502, tente novamente
+    end
 
-    Note over Admin,Phone: O Prestou não envia convite outbound
-    Admin-->>Phone: Orienta a iniciar conversa com o Prestou
-    Phone->>Meta: Envia uma mensagem
+    Note over Admin,Phone: O template não valida o número; a resposta valida
+    Phone->>Meta: Toca no botão ou responde Oi/Sim
     Meta->>API: POST webhook assinado com wa_id e message_id
     API->>API: Valida assinatura sobre o corpo bruto
     API->>DB: Procura provider canônico verificado
@@ -554,8 +566,9 @@ O template deve ser criado em uma WABA real:
 - um parâmetro de corpo para o OTP;
 - botão de copiar código compatível com o parâmetro enviado.
 
-O cadastro iniciado por inbound não usa template: a mensagem com o link é uma
-resposta livre dentro da janela de atendimento aberta pelo usuário.
+Depois da resposta ao `convite_prestador`, a mensagem com o link não exige um
+segundo template: ela é uma resposta livre dentro da janela de atendimento
+aberta pelo usuário.
 
 ## 4.4 Confirmação
 
@@ -690,6 +703,9 @@ um scheduler externo precisa chamar o endpoint.
 
 | Situação | Resposta/comportamento |
 | --- | --- |
+| Signup desabilitado ao criar convite | `503`, nenhum convite criado |
+| Número já possui conta ou convite ativo | `409`, nenhum template enviado |
+| Meta rejeita o template de convite | `502`, convite novo revogado |
 | Webhook sem assinatura válida | `401` |
 | Payload válido sem mensagem suportada | `200 received`, silêncio |
 | Número desconhecido sem convite | `200 received`, zero onboarding e zero LLM |
@@ -736,6 +752,7 @@ WHATSAPP_VERIFY_TOKEN=<segredo-do-handshake>
 WHATSAPP_APP_SECRET=<app-secret-meta>
 
 WHATSAPP_SIGNUP_ENABLED=true
+WHATSAPP_SIGNUP_TEMPLATE=convite_prestador
 WHATSAPP_ONBOARDING_SECRET=<32-bytes-aleatorios>
 TURNSTILE_SECRET_KEY=<turnstile-secret>
 
@@ -781,6 +798,7 @@ Nenhum segredo server-side pode usar prefixo `VITE_`.
 
 | Variável | Padrão | Função |
 | --- | ---: | --- |
+| `WHATSAPP_SIGNUP_TEMPLATE` | `convite_prestador` | Template Meta enviado ao criar o convite |
 | `WHATSAPP_ONBOARDING_SESSION_TTL_MINUTES` | `1440` | Vida da sessão de cadastro |
 | `WHATSAPP_ONBOARDING_LINK_TTL_MINUTES` | `15` | Vida do link |
 | `WHATSAPP_SIGNUP_GLOBAL_DAILY_LIMIT` | `50` | Tentativas globais de emissão |
@@ -817,17 +835,28 @@ Com `NODE_ENV=production`, a API atual exige:
 - `WHATSAPP_PHONE_NUMBER_ID` e `WHATSAPP_ACCESS_TOKEN`;
 - `WHATSAPP_VERIFY_TOKEN` e `WHATSAPP_APP_SECRET`;
 - `WHATSAPP_AUTH_TEMPLATE`;
+- `WHATSAPP_SIGNUP_TEMPLATE=convite_prestador`;
 - `TURNSTILE_SECRET_KEY` quando `WHATSAPP_SIGNUP_ENABLED=true`.
 
-Embora o cadastro por inbound não use template, a implementação atual exige
-`WHATSAPP_AUTH_TEMPLATE` no startup para manter a troca de número disponível.
+O template `convite_prestador` inicia o contato; o link de cadastro continua
+sendo uma resposta livre dentro da janela aberta pelo inbound. A implementação
+também exige `WHATSAPP_AUTH_TEMPLATE` para manter a troca de número disponível.
+
+Conteúdo esperado do template `convite_prestador` (`pt_BR`), sem variáveis:
+
+> Olá! Você recebeu um convite para criar sua conta no Prestou. Para confirmar
+> que este WhatsApp é seu e continuar o cadastro, toque no botão abaixo ou
+> responda “Sim” ou “Oi”.
+
+Botão de resposta rápida: **Confirmar cadastro**.
 
 # 9. Checklist de aceite
 
 ## Convite e inbound
 
 - [ ] Somente administrador confirmado cria, lista ou revoga convites.
-- [ ] Convite não envia mensagem outbound.
+- [ ] Criar convite envia o template `convite_prestador` ao número informado.
+- [ ] Falha de entrega revoga o convite novo e retorna erro ao administrador.
 - [ ] Convite sozinho não marca o telefone como validado.
 - [ ] Webhook inválido é rejeitado antes de qualquer ação.
 - [ ] Número sem convite fica silencioso e não passa pela LLM.

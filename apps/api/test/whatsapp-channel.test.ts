@@ -64,6 +64,23 @@ test("parseInboundMessage extrai clique em botão interativo", () => {
   });
 });
 
+test("parseInboundMessage extrai quick reply do template de convite", () => {
+  const payload = {
+    entry: [{ changes: [{ value: { messages: [{
+      id: "wamid.signup-1",
+      from: "5511988887777",
+      type: "button",
+      button: { text: "Confirmar cadastro", payload: "signup:confirm" },
+    }] } }] }],
+  };
+  assert.deepEqual(parseInboundMessage(payload), {
+    id: "wamid.signup-1",
+    from: "5511988887777",
+    kind: "button",
+    buttonId: "signup:confirm",
+  });
+});
+
 test("parseInboundMessage ignora payloads sem mensagem (status update)", () => {
   const payload = { entry: [{ changes: [{ value: { statuses: [{ status: "delivered" }] } }] }] };
   assert.equal(parseInboundMessage(payload), undefined);

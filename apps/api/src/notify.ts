@@ -47,6 +47,7 @@ export function buildWhatsAppTemplatePayload(input: {
   language: string;
   bodyParams?: string[];
   urlButtonParam?: string;
+  quickReplyButtonPayload?: string;
 }) {
   const components = [];
 
@@ -66,6 +67,15 @@ export function buildWhatsAppTemplatePayload(input: {
     });
   }
 
+  if (input.quickReplyButtonPayload) {
+    components.push({
+      type: "button",
+      sub_type: "quick_reply",
+      index: "0",
+      parameters: [{ type: "payload", payload: input.quickReplyButtonPayload }],
+    });
+  }
+
   return {
     messaging_product: "whatsapp",
     to: input.to,
@@ -76,6 +86,41 @@ export function buildWhatsAppTemplatePayload(input: {
       components: components.length ? components : undefined,
     },
   };
+}
+
+export async function sendWhatsAppTemplate(input: {
+  to: string;
+  name: string;
+  bodyParams?: string[];
+  urlButtonParam?: string;
+  quickReplyButtonPayload?: string;
+}): Promise<void> {
+  const to = input.to.replace(/\D/g, "");
+  if (config.whatsapp.mode === "log") {
+    console.info(`[whatsapp:log] template ${input.name} → ${to}`);
+    return;
+  }
+
+  const { phoneNumberId, accessToken, templateLang } = config.whatsapp;
+  if (!phoneNumberId || !accessToken) {
+    throw new Error(
+      "WHATSAPP_PHONE_NUMBER_ID e WHATSAPP_ACCESS_TOKEN são obrigatórios no modo cloud-api",
+    );
+  }
+  const payload = buildWhatsAppTemplatePayload({
+    ...input,
+    to,
+    language: templateLang,
+  });
+  const res = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Cloud API ${res.status}: ${await res.text()}`);
 }
 
 /**
@@ -134,7 +179,7 @@ export async function notifyProvider(input: NotifyInput): Promise<void> {
  * Usa template utility aprovado — nunca marketing (10x mais caro).
  */
 async function sendViaCloudApi(input: NotifyInput): Promise<void> {
-  const { phoneNumberId, accessToken, templateLang } = config.whatsapp;
+  const { phoneNumberId, accessToken } = config.whatsapp;
   if (!phoneNumberId || !accessToken) {
     throw new Error(
       "WHATSAPP_PHONE_NUMBER_ID e WHATSAPP_ACCESS_TOKEN são obrigatórios no modo cloud-api",
@@ -142,25 +187,28 @@ async function sendViaCloudApi(input: NotifyInput): Promise<void> {
   }
 
   const to = (input.to ?? input.provider.whatsapp).replace(/\D/g, "");
-  const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
+  if (input.template) {
+    await sendWhatsAppTemplate({
+      to,
+      name: input.template,
+      bodyParams: input.templateParams,
+      urlButtonParam: input.templateUrlButtonParam,
+    });
+    return;
+  }
 
-  const payload = input.template
-    ? buildWhatsAppTemplatePayload({
-        to,
-        name: input.template,
-        language: templateLang,
-        bodyParams: input.templateParams,
-        urlButtonParam: input.templateUrlButtonParam,
-      })
-    : { messaging_product: "whatsapp", to, type: "text", text: { body: input.body } };
-
-  const res = await fetch(url, {
+  const res = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body: input.body },
+    }),
   });
 
   if (!res.ok) {

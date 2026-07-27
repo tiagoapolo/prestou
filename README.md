@@ -22,6 +22,8 @@ Implementado:
 - painel “quem me deve”;
 - lembretes D+0, D+2 e D+5;
 - notificações ao prestador pela Meta Cloud API;
+- convites proativos de prestadores pelo template `convite_prestador`, com
+  confirmação do número por resposta ou botão;
 - assistente bidirecional no WhatsApp com confirmação de cobrança por botões;
 - guardrails persistentes de custo, abuso, duplicidade e concorrência;
 - analytics do funil e auditoria de transições;
@@ -136,9 +138,10 @@ Configure no Supabase Auth:
   server-side depois de convite + CAPTCHA;
 - SMTP próprio antes de ampliar o piloto, se necessário.
 
-No piloto por convite, configure também o Turnstile, o template de autenticação
-`WHATSAPP_AUTH_TEMPLATE` para troca posterior de número e um cron autenticado
-para `POST /api/internal/run-whatsapp-onboarding-retention`.
+No piloto por convite, configure também o Turnstile, o template de convite
+`convite_prestador`, o template de autenticação `WHATSAPP_AUTH_TEMPLATE` para
+troca posterior de número e um cron autenticado para
+`POST /api/internal/run-whatsapp-onboarding-retention`.
 
 ## Variáveis da API
 
@@ -169,6 +172,12 @@ WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_TEMPLATE_LANG=pt_BR
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
+
+WHATSAPP_SIGNUP_ENABLED=true
+WHATSAPP_SIGNUP_TEMPLATE=convite_prestador
+WHATSAPP_ONBOARDING_SECRET=
+WHATSAPP_AUTH_TEMPLATE=
+TURNSTILE_SECRET_KEY=
 
 WHATSAPP_RATE_LIMIT_PER_MINUTE=10
 WHATSAPP_DAILY_MESSAGE_LIMIT=100
@@ -256,6 +265,19 @@ abertas como links `wa.me` e enviadas manualmente pelo prestador.
 A configuração completa da Meta, vínculo do número, token permanente, webhook,
 guardrails de custo, testes e diagnóstico estão em
 [`docs/whatsapp-operacao.md`](./docs/whatsapp-operacao.md).
+
+### Pendência futura — retry/outbox de notificações
+
+Implementar um worker idempotente para reprocessar notificações de WhatsApp
+gravadas em `notifications` com status `failed`. O envio síncrono atual deve
+permanecer como primeira tentativa; o worker deve usar tentativas limitadas,
+backoff, trava concorrente e chave de idempotência, sem reenviar registros já
+marcados como `sent`. Também deve preservar o erro final para diagnóstico e
+observabilidade.
+
+A implementação poderá acrescentar campos como `attempt_count`,
+`next_attempt_at` e `last_attempt_at`, além de um estado terminal/dead-letter
+para falhas que excederem o limite de tentativas.
 
 ## Qualidade
 

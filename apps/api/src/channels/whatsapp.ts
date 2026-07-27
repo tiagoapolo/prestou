@@ -167,6 +167,15 @@ export function parseInboundMessage(payload: unknown): InboundMessage | undefine
         if (typeof id === "string" && typeof from === "string" && typeof buttonId === "string" && buttonId) {
           return { id, from, kind: "button", buttonId };
         }
+        const templateButtonPayload = (
+          message as { button?: { payload?: unknown } }
+        ).button?.payload;
+        if (
+          typeof id === "string" && typeof from === "string" &&
+          typeof templateButtonPayload === "string" && templateButtonPayload
+        ) {
+          return { id, from, kind: "button", buttonId: templateButtonPayload };
+        }
       }
     }
   }

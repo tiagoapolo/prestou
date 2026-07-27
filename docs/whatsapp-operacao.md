@@ -60,6 +60,12 @@ WHATSAPP_TEMPLATE_LANG=pt_BR
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
 
+WHATSAPP_SIGNUP_ENABLED=true
+WHATSAPP_SIGNUP_TEMPLATE=convite_prestador
+WHATSAPP_ONBOARDING_SECRET=
+WHATSAPP_AUTH_TEMPLATE=
+TURNSTILE_SECRET_KEY=
+
 WHATSAPP_RATE_LIMIT_PER_MINUTE=10
 WHATSAPP_DAILY_MESSAGE_LIMIT=100
 WHATSAPP_MAX_MESSAGE_LENGTH=1000
@@ -94,16 +100,40 @@ O número não autentica o webhook sozinho. A ordem de confiança é:
 
 1. a assinatura da Meta prova a origem do POST;
 2. o `wa_id` é normalizado;
-3. a API procura um número único, vinculado e verificado em
-   `provider_whatsapp_numbers`;
+3. a API procura um número único e verificado em `providers.whatsapp`;
 4. o `provider_id` é derivado no servidor e nunca aceito do payload externo.
 
 A Meta pode entregar números brasileiros com ou sem o nono dígito. A resolução
 considera as duas formas apenas para localizar o vínculo já verificado. Número
-desconhecido, não verificado ou ambíguo é ignorado sem chamar a IA.
+desconhecido, não verificado ou ambíguo nunca chama a IA. Antes de ficar
+silencioso, ele pode reivindicar um convite ativo do mesmo número.
 
 O vínculo feito pelo WhatsApp não altera a autenticação do Dashboard, que
 continua usando JWT do Supabase.
+
+## Convite proativo de prestador
+
+Ao criar um convite no painel administrativo, a API:
+
+1. valida o administrador, o celular e a ausência de conta/convite ativo;
+2. grava o convite como `pending`;
+3. envia o template `convite_prestador` em `pt_BR`;
+4. retorna `201` somente quando a Meta aceita o envio;
+5. revoga o convite novo e retorna `502` se a entrega for rejeitada.
+
+O template não comprova posse do telefone. A comprovação nasce quando o número
+convidado responde “Oi”/“Sim” ou toca no quick reply **Confirmar cadastro**. O
+webhook assinado então muda o convite para `claimed`, cria a sessão e responde o
+link de cadastro com TTL de 15 minutos. O link segue para CAPTCHA, magic link do
+Supabase com `shouldCreateUser: false` e criação transacional do `provider`.
+
+Conteúdo esperado do template, sem variáveis:
+
+> Olá! Você recebeu um convite para criar sua conta no Prestou. Para confirmar
+> que este WhatsApp é seu e continuar o cadastro, toque no botão abaixo ou
+> responda “Sim” ou “Oi”.
+
+Botão de resposta rápida: **Confirmar cadastro**.
 
 ## Fluxo do assistente
 
@@ -200,6 +230,19 @@ O primeiro comando usa `hello_world` em `en_US`. Templates temporários servem
 para validar transporte; templates próprios precisam de aprovação para iniciar
 conversas fora da janela permitida pela Meta.
 
+### Teste do convite de prestador
+
+1. confirme que `convite_prestador` está aprovado em `pt_BR` na mesma WABA;
+2. configure `WHATSAPP_SIGNUP_ENABLED=true` e
+   `WHATSAPP_SIGNUP_TEMPLATE=convite_prestador`;
+3. adicione o telefone convidado aos destinatários permitidos, se a WABA ainda
+   estiver em modo de teste;
+4. crie o convite pelo painel administrativo;
+5. confirme o recebimento do template e toque em **Confirmar cadastro** — ou
+   responda “Oi”/“Sim”;
+6. confirme que a resposta seguinte contém `/cadastro?token=` e que o convite
+   aparece como `claimed`.
+
 ### Teste bidirecional
 
 1. inicie `pnpm dev:api`;
@@ -223,21 +266,41 @@ pnpm --filter @prestou/api typecheck
 |---|---|---|
 | `401`, OAuth `190` | token expirado, revogado ou incorreto | gerar token do usuário do sistema, atualizar env e reiniciar |
 | `400`, `131030` | destinatário não permitido no modo de teste | adicionar o número à lista de destinatários da Meta |
+| convite retorna `502` | template ausente/rejeitado, idioma divergente ou falha da Cloud API | conferir `convite_prestador`, `pt_BR` e logs `signup invite delivery failed` |
+| template chega, mas botão não gera link | webhook não recebe o quick reply ou convite deixou de estar ativo | conferir assinatura `messages`, payload `signup:confirm` e status do convite |
 | `GET webhook` retorna `403` | verify token ou caminho incorreto | conferir o valor e usar `/api/whatsapp/webhook` |
 | teste do webhook funciona, mas mensagem real não chega | WABA/app não inscritos em `messages` | conferir a assinatura do campo e a conta selecionada |
 | ngrok não recebe request | callback antigo, túnel encerrado ou caminho errado | atualizar a URL HTTPS completa na Meta |
 | resposta registrada, mas não enviada | `WHATSAPP_MODE=log` ou credenciais ausentes | usar `cloud-api`, preencher env e reiniciar |
 | mensagens são ignoradas | número sem vínculo/verificação ou guardrail ativo | conferir vínculo e logs `whatsapp inbound blocked by guardrail` |
 
+## Pendência futura — retry/outbox de notificações
+
+Hoje, o envio pela Meta Cloud API acontece de forma síncrona. Quando a entrega
+falha, a tentativa fica registrada em `notifications` com status `failed`, mas
+não existe reprocessamento automático.
+
+Implementar um worker idempotente que reprocesse esses registros com tentativas
+limitadas, backoff, trava concorrente e chave de idempotência. O worker não deve
+duplicar mensagens já marcadas como `sent` e deve preservar o erro final para
+observabilidade. Considerar os campos `attempt_count`, `next_attempt_at` e
+`last_attempt_at`, além de um estado terminal/dead-letter para falhas que
+excederem o limite configurado. O envio síncrono permanece como a primeira
+tentativa.
+
 ## Arquivos e migrações
 
 - `apps/api/src/channels/whatsapp.ts`: assinatura, parsing, número BR e botões;
 - `apps/api/src/routes/whatsapp.ts`: Settings, webhook e entrega Cloud API;
+- `apps/api/src/whatsapp-onboarding.ts`: convites, template, sessão, token e gate do Supabase Auth;
+- `apps/api/src/notify.ts`: payload e envio dos templates Meta;
 - `apps/api/src/whatsapp-guardrail*.ts`: admissão, hash e respostas fixas;
 - `apps/api/src/orchestrator.ts`: cérebro compartilhado;
 - `apps/api/src/charge-creation.ts`: criação comum ao WhatsApp e Dashboard;
 - `scripts/test-whatsapp.mjs`: teste de templates;
-- `20260722120000_provider_whatsapp_numbers.sql`: vínculo do número;
+- `20260722120000_provider_whatsapp_numbers.sql`: vínculo histórico, substituído
+  pela unificação posterior;
+- `20260724120000_whatsapp_number_unification.sql`: número canônico, convites e onboarding privado;
 - `20260722195152_whatsapp_charge_proposals.sql`: confirmação persistida;
 - `20260722202510_whatsapp_guardrail.sql`: limites atômicos e circuit breaker.
 

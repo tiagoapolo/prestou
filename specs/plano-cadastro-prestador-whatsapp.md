@@ -1,6 +1,7 @@
 ---
 title: "Avaliação — Cadastro do prestador pelo WhatsApp vs. login pelo dashboard"
 created: 2026-07-23
+updated: 2026-07-26
 status: implementação revisada
 tags:
   - prestou
@@ -76,8 +77,8 @@ Pix a erro de chat.
 Ponto central do híbrido, e o que o torna barato: **a validação do número não é
 um passo extra — ela acontece como subproduto do início pelo WhatsApp.**
 
-Quando o prestador manda a primeira mensagem (fluxo user-initiated), a Meta
-Cloud API entrega o `wa_id` do remetente já autenticado pela própria Meta. O
+Quando o prestador responde ao template ou toca em **Confirmar cadastro**, a
+Meta Cloud API entrega o `wa_id` do remetente já autenticado pela própria Meta. O
 número está provado pelo simples fato de a mensagem ter chegado daquele
 aparelho — não é preciso enviar um código OTP e pedir que ele digite de volta.
 
@@ -120,8 +121,9 @@ limite no banco.
 Enquanto o piloto for assistido, somente um número previamente convidado recebe
 o link. Um número não convidado recebe `200` silencioso: não cria sessão, não
 cria usuário, não recebe resposta e não chama LLM. O convite é de uso único,
-expira e só é reivindicado quando o próprio número envia uma mensagem ao
-WhatsApp do Prestou por webhook assinado da Meta.
+expira e dispara o template `convite_prestador`. Ele só é reivindicado quando o
+próprio número responde ou toca no botão do template, por webhook assinado da
+Meta.
 
 Quando a abertura pública for justificada por conversão medida, remove-se o
 convite, mas preservam-se todos os controles seguintes. Deve existir um kill
@@ -133,7 +135,7 @@ para voltar a convite sem deploy.
 | Estado | Persistência | O que pode fazer |
 | --- | --- | --- |
 | `unknown` | nenhuma persistência de onboarding | nenhuma resposta e nenhuma LLM |
-| `invited` | convite privado com TTL | enviar mensagem ao Prestou para provar o próprio número |
+| `invited` | convite privado com TTL | responder ao template para provar o próprio número |
 | `pending` | sessão privada + token com TTL | confirmar e-mail, preencher os dados web; sem LLM ou operação financeira |
 | `active` | `auth.users` + `providers` | usar o produto, ainda protegido pelo guardrail existente |
 | `revoked` / `expired` | convite ou sessão sem capacidade | nenhuma resposta; retenção remove o estado transitório |
@@ -204,8 +206,8 @@ da infraestrutura da Meta e vários usuários compartilham essa origem. A chave
 Verificar telefone e e-mail não impede um humano malicioso. Um estado adicional
 de `active_probation` **não faz parte deste incremento**. No piloto atual:
 
-- não há envio automático de convite nem de mensagens a terceiros originado
-  pelo onboarding;
+- o único outbound automático do onboarding é o template `convite_prestador`,
+  enviado pelo admin ao número explicitamente convidado;
 - nenhuma operação em lote e nenhum envio automático originado apenas pelo
   onboarding;
 - respeitar opt-out/bloqueio de destinatários e não tentar novos envios;
@@ -431,8 +433,9 @@ drop table public.provider_whatsapp_numbers;
 ### Convites do piloto
 
 - Administradores server-side criam, listam e revogam convites por número.
-- Convite não valida nem reserva uma conta: ele é reivindicado somente quando o
-  mesmo número envia um inbound com assinatura válida da Meta.
+- Criar o convite envia `convite_prestador`, mas não valida nem reserva uma
+  conta: ele é reivindicado somente quando o mesmo número envia um inbound com
+  assinatura válida da Meta.
 - O primeiro inbound admitido recebe um link com token aleatório de 32 bytes;
   somente o HMAC é persistido. Enquanto estiver válido, novas mensagens ficam
   silenciosas; depois da expiração, a reemissão invalida o token anterior.
@@ -481,11 +484,12 @@ mensagens seguintes ficam silenciosos enquanto ele estiver válido.
 
 ### Templates da Meta
 
-- O cadastro iniciado por inbound **não precisa de template**: o link é uma
-  resposta livre dentro da janela de atendimento aberta pelo usuário.
-- Criar convite no painel **não envia mensagem outbound**. O administrador deve
-  orientar o número convidado a conversar com o WhatsApp do Prestou. Envio
-  proativo exigiria opt-in e um template separado, fora deste escopo.
+- Criar convite no painel envia o template aprovado `convite_prestador`, com o
+  botão de quick reply “Confirmar cadastro” e orientação para responder “Oi” ou
+  “Sim”. O envio não valida o número; apenas o inbound subsequente faz isso.
+- Depois do inbound, o link é uma resposta livre dentro da janela de atendimento
+  aberta pelo usuário.
+- Falha ao enviar o template revoga o convite novo e retorna erro ao admin.
 - A troca posterior do número usa somente o template de autenticação configurado
   em `WHATSAPP_AUTH_TEMPLATE`, com o código OTP e botão de copiar código.
 

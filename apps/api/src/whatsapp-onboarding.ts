@@ -5,12 +5,14 @@ import { z } from "zod";
 import { requireAppAdmin } from "./auth.js";
 import { config } from "./config.js";
 import {
+  execute,
   queryAll,
   queryOne,
   withTransaction,
   type DatabaseClient,
 } from "./db.js";
 import { newId } from "./ids.js";
+import { sendWhatsAppTemplate } from "./notify.js";
 import { nationalWhatsAppIdentityCandidates, type InboundMessage } from "./channels/whatsapp.js";
 import { mobileSchema, requiredText } from "./validation.js";
 
@@ -24,6 +26,8 @@ const authorizeEmailSchema = z.object({
   email: emailSchema,
   captchaToken: requiredText("CAPTCHA", 1, 4_096),
 }).strict();
+
+const SIGNUP_CONFIRM_PAYLOAD = "signup:confirm";
 
 const onboardingSecret =
   config.whatsapp.signup.onboardingSecret || config.supabase.serviceRoleKey;
@@ -642,6 +646,9 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
     "/api/admin/whatsapp-invites",
     { preHandler: requireAppAdmin },
     async (req, reply) => {
+      if (!config.whatsapp.signup.enabled) {
+        return reply.code(503).send({ error: "Cadastro por WhatsApp está desativado." });
+      }
       const body = createInviteSchema.safeParse(req.body);
       if (!body.success) {
         return reply.code(400).send({ error: "Informe um celular válido para o convite." });
@@ -675,6 +682,24 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
             id,
           ))!;
         });
+        try {
+          await sendWhatsAppTemplate({
+            to: `55${invite.phone}`,
+            name: config.whatsapp.signup.template,
+            quickReplyButtonPayload: SIGNUP_CONFIRM_PAYLOAD,
+          });
+        } catch (error) {
+          await execute(
+            `UPDATE private.whatsapp_signup_invites
+                SET status = 'revoked', revoked_at = now()
+              WHERE id = ? AND status = 'pending'`,
+            invite.id,
+          );
+          req.log.error({ err: error, inviteId: invite.id }, "signup invite delivery failed");
+          return reply.code(502).send({
+            error: "Não foi possível enviar o convite pelo WhatsApp. Tente novamente.",
+          });
+        }
         return reply.code(201).send({ invite });
       } catch (error) {
         if ((error as { code?: string }).code === "23505") {

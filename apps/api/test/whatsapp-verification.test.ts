@@ -30,6 +30,7 @@ process.env.WHATSAPP_ACCESS_TOKEN = "test-access-token";
 process.env.WHATSAPP_AUTH_TEMPLATE = "prestou_codigo_verificacao";
 process.env.WHATSAPP_APP_SECRET = "test-app-secret";
 process.env.WHATSAPP_SIGNUP_ENABLED = "true";
+process.env.WHATSAPP_SIGNUP_TEMPLATE = "convite_prestador";
 process.env.WHATSAPP_VERIFICATION_RESEND_SECONDS = "60";
 process.env.WHATSAPP_VERIFICATION_PROVIDER_DAILY = "3";
 process.env.LOG_LEVEL = "silent";
@@ -57,6 +58,7 @@ const candidatePhones = new Set<string>();
 const realFetch = globalThis.fetch;
 const sentCodes = new Map<string, string>();
 const sentTexts = new Map<string, string[]>();
+const sentTemplates = new Map<string, unknown[]>();
 let failDelivery = false;
 
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -67,6 +69,11 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return new Response("meta unavailable", { status: 503 });
   }
   const payload = JSON.parse(String(init?.body ?? "{}"));
+  if (payload.to && payload.template) {
+    const templates = sentTemplates.get(payload.to) ?? [];
+    templates.push(payload.template);
+    sentTemplates.set(payload.to, templates);
+  }
   const bodyComponent = payload.template?.components?.find(
     (component: { type: string }) => component.type === "body",
   );
@@ -307,6 +314,23 @@ test("administrador cria, lista e revoga convite para um número", async () => {
     authUser!.auth_user_id,
   );
 
+  const failedPhone = "11932220004";
+  failDelivery = true;
+  const failed = await app.inject({
+    method: "POST",
+    url: "/api/admin/whatsapp-invites",
+    headers: authHeader(inviter.token),
+    payload: { phone: failedPhone, expiresInDays: 7 },
+  });
+  failDelivery = false;
+  assert.equal(failed.statusCode, 502);
+  const compensated = await queryOne<{ status: string }>(
+    `SELECT status FROM private.whatsapp_signup_invites
+      WHERE phone = ? ORDER BY created_at DESC LIMIT 1`,
+    failedPhone,
+  );
+  assert.equal(compensated?.status, "revoked");
+
   const phone = "11932220002";
   const created = await app.inject({
     method: "POST",
@@ -317,6 +341,16 @@ test("administrador cria, lista e revoga convite para um número", async () => {
   assert.equal(created.statusCode, 201);
   assert.equal(created.json().invite.phone, phone);
   assert.equal(created.json().invite.status, "pending");
+  assert.deepEqual(sentTemplates.get(`55${phone}`)?.at(-1), {
+    name: "convite_prestador",
+    language: { code: "pt_BR" },
+    components: [{
+      type: "button",
+      sub_type: "quick_reply",
+      index: "0",
+      parameters: [{ type: "payload", payload: "signup:confirm" }],
+    }],
+  });
 
   const listed = await app.inject({
     method: "GET",
