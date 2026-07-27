@@ -403,6 +403,75 @@ test("somente administrador lista prestadores registrados", async () => {
   assert.equal(listed.json().nextCursor, null);
 });
 
+test("administrador remove conta, dados relacionados e comprovantes", async () => {
+  const moderator = await createProvider("delete-moderator", "11930000012");
+  const target = await createProvider("delete-target", "11930000013");
+  const moderatorAuth = await queryOne<{ auth_user_id: string }>(
+    "SELECT auth_user_id FROM providers WHERE id = ?",
+    moderator.id,
+  );
+  assert.ok(moderatorAuth);
+  const targetAuth = await queryOne<{ auth_user_id: string }>(
+    "SELECT auth_user_id FROM providers WHERE id = ?",
+    target.id,
+  );
+  assert.ok(targetAuth);
+  await execute(
+    "INSERT INTO private.app_admins (auth_user_id) VALUES (?) ON CONFLICT DO NOTHING",
+    moderatorAuth!.auth_user_id,
+  );
+
+  const selfDeletion = await app.inject({
+    method: "DELETE",
+    url: `/api/admin/providers/${moderator.id}`,
+    headers: authHeader(moderator.token),
+  });
+  assert.equal(selfDeletion.statusCode, 409);
+
+  const charge = await app.inject({
+    method: "POST",
+    url: "/api/charges",
+    headers: authHeader(target.token),
+    payload: {
+      client: { name: "Cliente da exclusão", whatsapp: "11939990001" },
+      description: "Serviço a remover",
+      amountCents: 10000,
+      dueDate: "2026-08-20",
+      fillMs: 1_000,
+    },
+  });
+  assert.equal(charge.statusCode, 201);
+  const payment = await queryOne<{ id: string }>(
+    `SELECT payments.id
+       FROM payments JOIN charges ON charges.id = payments.charge_id
+      WHERE charges.provider_id = ?`,
+    target.id,
+  );
+  assert.ok(payment);
+  const receiptPath = `${target.id}/${payment!.id}/delete-test.png`;
+  const uploaded = await admin.storage.from("receipts").upload(
+    receiptPath,
+    new TextEncoder().encode("delete me"),
+    { contentType: "image/png" },
+  );
+  assert.ifError(uploaded.error);
+  await execute("UPDATE payments SET comprovante_path = ? WHERE id = ?", receiptPath, payment!.id);
+
+  const deleted = await app.inject({
+    method: "DELETE",
+    url: `/api/admin/providers/${target.id}`,
+    headers: authHeader(moderator.token),
+  });
+  assert.equal(deleted.statusCode, 200);
+  assert.equal(deleted.json().deleted, true);
+  assert.equal(await queryOne("SELECT id FROM providers WHERE id = ?", target.id), undefined);
+  assert.equal(await queryOne("SELECT id FROM clients WHERE provider_id = ?", target.id), undefined);
+  const authUser = await admin.auth.admin.getUserById(targetAuth!.auth_user_id);
+  assert.ok(authUser.error);
+  const downloaded = await admin.storage.from("receipts").download(receiptPath);
+  assert.ok(downloaded.error);
+});
+
 test("retenção remove somente usuário Auth provisório abandonado", async () => {
   const created = await admin.auth.admin.createUser({
     email: `prestou-abandoned-${crypto.randomUUID()}@example.com`,

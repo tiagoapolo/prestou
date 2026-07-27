@@ -28,8 +28,14 @@ export async function signedReceiptUrl(objectPath: string): Promise<string> {
 }
 
 export async function deleteReceipt(objectPath: string): Promise<void> {
-  const { error } = await storageClient.storage
-    .from(config.supabase.receiptsBucket)
-    .remove([objectPath]);
-  if (error) throw error;
+  await deleteReceipts([objectPath]);
+}
+
+export async function deleteReceipts(objectPaths: string[]): Promise<void> {
+  for (let start = 0; start < objectPaths.length; start += 1_000) {
+    const { error } = await storageClient.storage
+      .from(config.supabase.receiptsBucket)
+      .remove(objectPaths.slice(start, start + 1_000));
+    if (error) throw error;
+  }
 }

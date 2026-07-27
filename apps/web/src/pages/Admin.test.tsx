@@ -27,6 +27,8 @@ describe("página de administração", () => {
   beforeEach(() => {
     mockApi.mockReset();
     authState.admin = true;
+    HTMLDialogElement.prototype.showModal = function showModal() { this.open = true; };
+    HTMLDialogElement.prototype.close = function close() { this.open = false; };
     mockApi.mockImplementation(<T,>(path: string): Promise<T> => {
       if (path === "/api/admin/providers") {
         return Promise.resolve({ providers: [], nextCursor: null } as T);
@@ -98,10 +100,13 @@ describe("página de administração", () => {
     expect(await screen.findByText("revoked")).toBeTruthy();
   });
 
-  it("lista e busca usuários registrados", async () => {
-    mockApi.mockImplementation(<T,>(path: string): Promise<T> => {
+  it("lista, busca e remove usuários somente após confirmação", async () => {
+    mockApi.mockImplementation(<T,>(path: string, init?: RequestInit): Promise<T> => {
       if (path === "/api/admin/whatsapp-invites") {
         return Promise.resolve({ invites: [] } as T);
+      }
+      if (path === "/api/admin/providers/11111111-1111-4111-8111-111111111111" && init?.method === "DELETE") {
+        return Promise.resolve({ deleted: true } as T);
       }
       if (path === "/api/admin/providers") {
         return Promise.resolve({
@@ -128,6 +133,20 @@ describe("página de administração", () => {
     expect(await screen.findByRole("table", { name: "Usuários registrados" })).toBeTruthy();
     expect(screen.getByText("João Jardineiro")).toBeTruthy();
     expect(screen.getByText("(11) 97654-3210")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remover João Jardineiro" }));
+    expect(screen.getByRole("heading", { name: "Remover usuário?" })).toBeTruthy();
+    expect(screen.getByText(/Não será possível desfazer/)).toBeTruthy();
+    expect(mockApi).not.toHaveBeenCalledWith(
+      "/api/admin/providers/11111111-1111-4111-8111-111111111111",
+      { method: "DELETE" },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remover definitivamente" }));
+    await waitFor(() => expect(mockApi).toHaveBeenCalledWith(
+      "/api/admin/providers/11111111-1111-4111-8111-111111111111",
+      { method: "DELETE" },
+    ));
+    await waitFor(() => expect(screen.queryByText("João Jardineiro")).toBeNull());
 
     fireEvent.change(screen.getByLabelText("Buscar usuários"), { target: { value: " maria " } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));

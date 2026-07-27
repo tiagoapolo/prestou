@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNotice, Spinner } from "../components";
@@ -46,6 +47,10 @@ export function AdminPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [providerToDelete, setProviderToDelete] = useState<AdminProvider | null>(null);
+  const [deletingProvider, setDeletingProvider] = useState(false);
+  const [deletionError, setDeletionError] = useState("");
+  const deletionDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     if (!provider?.admin) return;
@@ -76,6 +81,35 @@ export function AdminPage() {
     const query = searchInput.trim();
     setSearchQuery(query);
     void loadProviders(query);
+  }
+
+  function requestProviderDeletion(registeredProvider: AdminProvider) {
+    setProviderToDelete(registeredProvider);
+    setDeletionError("");
+    deletionDialog.current?.showModal();
+  }
+
+  function closeDeletionDialog() {
+    if (deletingProvider) return;
+    deletionDialog.current?.close();
+    setProviderToDelete(null);
+    setDeletionError("");
+  }
+
+  async function deleteProvider() {
+    if (!providerToDelete) return;
+    setDeletingProvider(true);
+    setDeletionError("");
+    try {
+      await api(`/api/admin/providers/${providerToDelete.id}`, { method: "DELETE" });
+      setProviders((current) => current.filter((item) => item.id !== providerToDelete.id));
+      deletionDialog.current?.close();
+      setProviderToDelete(null);
+    } catch (cause) {
+      setDeletionError(userMessage(cause, "Não foi possível remover o usuário."));
+    } finally {
+      setDeletingProvider(false);
+    }
   }
 
   async function loadInvites() {
@@ -152,7 +186,7 @@ export function AdminPage() {
         {providers.length > 0 && (
           <div className="admin-table-wrap">
             <table className="admin-table" aria-label="Usuários registrados">
-              <thead><tr><th>Usuário</th><th>Contato</th><th>Profissão</th><th>Localização</th><th>Cadastro</th></tr></thead>
+              <thead><tr><th>Usuário</th><th>Contato</th><th>Profissão</th><th>Localização</th><th>Cadastro</th><th>Ações</th></tr></thead>
               <tbody>
                 {providers.map((registeredProvider) => (
                   <tr key={registeredProvider.id}>
@@ -161,6 +195,20 @@ export function AdminPage() {
                     <td data-label="Profissão">{registeredProvider.profession}</td>
                     <td data-label="Localização">{[registeredProvider.city, registeredProvider.state].filter(Boolean).join(" - ") || "—"}</td>
                     <td data-label="Cadastro">{new Date(registeredProvider.createdAt).toLocaleDateString("pt-BR")}</td>
+                    <td data-label="Ações">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="admin-delete-button"
+                        disabled={registeredProvider.id === provider.id}
+                        aria-label={registeredProvider.id === provider.id ? "Sua conta administrativa não pode ser removida" : `Remover ${registeredProvider.name}`}
+                        title={registeredProvider.id === provider.id ? "Sua conta administrativa não pode ser removida" : `Remover ${registeredProvider.name}`}
+                        onClick={() => requestProviderDeletion(registeredProvider)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -173,6 +221,35 @@ export function AdminPage() {
           </Button>
         )}
       </Card>
+
+      <dialog
+        ref={deletionDialog}
+        className="action-dialog"
+        aria-labelledby="delete-provider-title"
+        onCancel={(event) => {
+          event.preventDefault();
+          closeDeletionDialog();
+        }}
+      >
+        {providerToDelete && <div className="action-dialog-content">
+          <div className="action-dialog-heading">
+            <span className="action-dialog-icon"><Trash2 aria-hidden="true" /></span>
+            <div><p className="eyebrow">Exclusão definitiva</p><h2 id="delete-provider-title">Remover usuário?</h2></div>
+          </div>
+          <p className="action-dialog-summary">{providerToDelete.name} · {providerToDelete.email ?? formatMobile(providerToDelete.whatsapp)}</p>
+          <p className="action-dialog-warning">
+            Esta ação removerá permanentemente a conta, clientes, cobranças, recebimentos,
+            histórico e comprovantes vinculados. Não será possível desfazer.
+          </p>
+          {deletionError && <ErrorNotice message={deletionError} />}
+          <div className="action-dialog-actions">
+            <Button type="button" variant="secondary" disabled={deletingProvider} onClick={closeDeletionDialog}>Cancelar</Button>
+            <Button type="button" variant="destructive" loading={deletingProvider} loadingLabel="Removendo…" onClick={() => void deleteProvider()}>
+              Remover definitivamente
+            </Button>
+          </div>
+        </div>}
+      </dialog>
 
       <Card className="form-card">
         <div className="settings-section-heading">
