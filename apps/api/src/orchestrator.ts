@@ -72,14 +72,21 @@ export interface AssistantDeps {
  */
 export type PartialCharge = z.infer<typeof extractedChargeSchema>;
 
+export type ChargeMemoryMode = "fill" | "edit";
+
+export interface ChargeMemoryEntry {
+  partial: PartialCharge;
+  mode: ChargeMemoryMode;
+}
+
 /**
  * Memória de curta duração do preenchimento de uma cobrança, escopada por
  * prestador. O modelo nunca a lê: o merge é feito no backend. Opcional — sem ela,
  * o orquestrador segue stateless (Dashboard single-shot, testes).
  */
 export interface ChargeMemory {
-  load(providerId: string): Promise<PartialCharge | null>;
-  save(providerId: string, partial: PartialCharge): Promise<void>;
+  load(providerId: string): Promise<ChargeMemoryEntry | null>;
+  save(providerId: string, entry: ChargeMemoryEntry): Promise<void>;
   clear(providerId: string): Promise<void>;
 }
 
@@ -158,14 +165,17 @@ const CAPABILITIES =
   "Posso preparar uma cobrança, listar quem está em atraso, mostrar a situação " +
   "de um cliente e resumir o mês.";
 
-function instructions(today: string): string {
+function instructions(today: string, memoryMode?: ChargeMemoryMode): string {
   return [
     "Você é o assistente do prestador no Prestou. Escolha exatamente uma ferramenta.",
     `Hoje em America/Sao_Paulo é ${today}.`,
     "Para cobrar, use preparar_cobranca: converta reais em centavos inteiros e datas relativas para AAAA-MM-DD; use null para todo campo ausente e não invente nada.",
+    memoryMode === "edit"
+      ? "Há uma cobrança em edição. Para correções ou respostas isoladas com cliente, serviço, valor ou vencimento, use preparar_cobranca e extraia somente os campos informados; outras intenções continuam usando a ferramenta correspondente."
+      : "",
     "Para 'quem me deve' / atrasados, use listar_inadimplentes. Para a situação de um cliente citado pelo nome, use status_cliente. Para cobranças em aberto, pendências, 'quanto tenho a receber' ou resumo do mês, use resumo_financeiro.",
     "Se o pedido não se encaixar em nenhuma dessas, use pedido_nao_suportado.",
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 }
 
 function normalizedName(value: string): string {
@@ -199,19 +209,27 @@ export function matchingClients(
  * Combina o rascunho pendente com o que a mensagem atual trouxe: cada campo novo
  * (não-nulo) sobrescreve o anterior; o que veio nulo herda do pendente. Se a
  * mensagem cita um cliente diferente do rascunho, é outra cobrança — descarta o
- * pendente para não vazar dados entre elas.
+ * pendente para não vazar dados entre elas. No modo de edição, preserva os
+ * demais campos, mas nunca herda o WhatsApp do cliente anterior.
  */
-export function mergeCharge(pending: PartialCharge | null, extracted: PartialCharge): PartialCharge {
+export function mergeCharge(
+  pending: PartialCharge | null,
+  extracted: PartialCharge,
+  mode: ChargeMemoryMode = "fill",
+): PartialCharge {
   if (!pending) return extracted;
-  if (
+  const clientChanged = Boolean(
     extracted.clientName && pending.clientName &&
     normalizedName(extracted.clientName) !== normalizedName(pending.clientName)
-  ) {
+  );
+  if (clientChanged && mode === "fill") {
     return extracted;
   }
   return {
     clientName: extracted.clientName ?? pending.clientName,
-    clientWhatsapp: extracted.clientWhatsapp ?? pending.clientWhatsapp,
+    clientWhatsapp: clientChanged
+      ? extracted.clientWhatsapp
+      : extracted.clientWhatsapp ?? pending.clientWhatsapp,
     description: extracted.description ?? pending.description,
     amountCents: extracted.amountCents ?? pending.amountCents,
     dueDate: extracted.dueDate ?? pending.dueDate,
@@ -382,13 +400,16 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
   const today = saoPauloDateISO(input.now ?? new Date());
   const llm = input.llm ?? openAiProvider;
 
-  // Uma resposta contendo só o telefone é inequívoca durante o preenchimento e
-  // não precisa voltar ao classificador stateless, que não conhece o rascunho.
-  const isPhoneReply = looksLikeStandaloneWhatsapp(input.message);
+  const pendingEntry = input.memory ? await input.memory.load(input.providerId) : null;
+  // Uma resposta contendo só o telefone é inequívoca quando é exatamente o
+  // campo que falta no preenchimento normal. Na edição, um número isolado pode
+  // ser o novo valor e precisa voltar ao classificador.
+  const isPhoneReply =
+    pendingEntry?.mode === "fill" &&
+    pendingEntry.partial.clientWhatsapp === null &&
+    looksLikeStandaloneWhatsapp(input.message);
   const parsedPhoneReply = isPhoneReply ? mobileSchema.safeParse(input.message) : null;
-  const phoneReplyPending = isPhoneReply && input.memory
-    ? await input.memory.load(input.providerId)
-    : null;
+  const phoneReplyPending = isPhoneReply ? pendingEntry : null;
 
   if (phoneReplyPending && parsedPhoneReply && !parsedPhoneReply.success) {
     return clarification(["um WhatsApp válido com DDD"]);
@@ -411,7 +432,7 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
         apiKey: input.apiKey,
         model: input.model,
         providerId: input.providerId,
-        instructions: instructions(today),
+        instructions: instructions(today, pendingEntry?.mode),
         tools: ALL_TOOLS,
         message: input.message,
         timeoutMs: input.timeoutMs,
@@ -429,10 +450,8 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
     case "preparar_cobranca": {
       const extracted = extractedChargeSchema.safeParse(call.arguments);
       if (!extracted.success) throw new AssistantServiceError("Campos inválidos do assistente");
-      const pending = phoneReplyPending ?? (input.memory
-        ? await input.memory.load(input.providerId)
-        : null);
-      const merged = mergeCharge(pending, extracted.data);
+      const memoryMode = pendingEntry?.mode ?? "fill";
+      const merged = mergeCharge(pendingEntry?.partial ?? null, extracted.data, memoryMode);
       const clients = await input.deps.listClients(input.providerId);
       const defaultDueDate = addDaysISO(today, input.defaultDueDays ?? 0);
       const result = buildDraft(merged, clients, defaultDueDate);
@@ -440,7 +459,7 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
         // Ainda falta algo → guarda o parcial para a próxima mensagem retomar;
         // rascunho pronto (ou erro de campo) → o preenchimento terminou.
         if (result.kind === "clarification") {
-          await input.memory.save(input.providerId, merged);
+          await input.memory.save(input.providerId, { partial: merged, mode: memoryMode });
         } else {
           await input.memory.clear(input.providerId);
         }

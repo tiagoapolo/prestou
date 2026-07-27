@@ -9,7 +9,7 @@ import { newId } from "../ids.js";
 import { notifyProvider } from "../notify.js";
 import { interpretMessage } from "../orchestrator.js";
 import { dbDeps } from "../assistant-data.js";
-import { dbChargeMemory } from "../charge-memory.js";
+import { dbChargeMemory, startChargeDraftEdit } from "../charge-memory.js";
 import {
   chargeConfirmationPayload,
   createdChargeMessages,
@@ -169,6 +169,14 @@ async function handleChargeProposalAction(
       }
 
       const draft = chargeDraftSchema.parse(persistedJson(proposal.draft));
+      if (action === "edit") {
+        await startChargeDraftEdit(tx, provider.id, proposal.id, draft);
+        return [
+          "Certo. O que você quer alterar?",
+          'Responda em uma frase, por exemplo: "valor para R$ 120 e vencimento para sexta-feira".',
+        ].join("\n");
+      }
+
       const created = await createCharge(tx, provider, draft, "whatsapp");
       const result: ChargeProposalResult = {
         chargeId: created.charge.id,

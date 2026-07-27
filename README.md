@@ -259,8 +259,8 @@ pnpm test:whatsapp -- --to 5511999999999 \
 
 O assistente do prestador também recebe mensagens pelo webhook, compartilha o
 mesmo orquestrador do Dashboard e cria cobranças somente após confirmação nos
-botões **Criar cobrança / Cancelar**. Mensagens ao cliente final continuam sendo
-abertas como links `wa.me` e enviadas manualmente pelo prestador.
+botões **Criar cobrança / Editar dados / Cancelar**. Mensagens ao cliente final
+continuam sendo abertas como links `wa.me` e enviadas manualmente pelo prestador.
 
 A configuração completa da Meta, vínculo do número, token permanente, webhook,
 guardrails de custo, testes e diagnóstico estão em

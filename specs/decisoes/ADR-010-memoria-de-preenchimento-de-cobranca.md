@@ -75,9 +75,9 @@ e sim ausência de estado conversacional.
 ## Consequências
 
 - Nova tabela `whatsapp_pending_charges`: **um rascunho parcial por prestador**
-  (PK em `provider_id`), `partial jsonb`, `expires_at` com **TTL de 10 minutos**
-  (alinhado ao `whatsapp_charge_proposals`), RLS ligada e sem acesso a
-  `anon`/`authenticated`.
+  (PK em `provider_id`), `partial jsonb`, modo `fill | edit`, `expires_at` com
+  **TTL de 10 minutos** (alinhado ao `whatsapp_charge_proposals`), RLS ligada e
+  sem acesso a `anon`/`authenticated`.
 - `interpretMessage` ganha uma dependência **opcional** `memory: ChargeMemory`.
   Sem ela, o comportamento é idêntico ao anterior — por isso o assistente
   single-shot do Dashboard (`POST /api/assistant/interpret`) e os testes antigos
@@ -89,6 +89,9 @@ e sim ausência de estado conversacional.
   futura. O TTL é apenas a rede de segurança.
 - **Cliente diferente = outra cobrança.** Se a mensagem cita um nome de cliente
   diferente do rascunho pendente, o merge descarta o pendente em vez de misturar.
+- **Edição confirmada pelo botão é a exceção explícita.** No modo `edit`, trocar
+  o cliente preserva serviço, valor e vencimento, mas descarta o WhatsApp do
+  cliente anterior para que o backend resolva o novo cadastro com segurança.
 - Rascunho concluído (vira `draft`) ou erro de campo limpam o parcial.
 
 ## Regras de merge

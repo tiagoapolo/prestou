@@ -164,7 +164,7 @@ Capacidades atuais:
 ## Criação de cobrança pelo WhatsApp
 
 Quando os dados são suficientes, o assistente persiste uma proposta e envia os
-botões **Criar cobrança** e **Cancelar**. A proposta:
+botões **Criar cobrança**, **Editar dados** e **Cancelar**. A proposta:
 
 - pertence ao prestador derivado do número verificado;
 - contém um rascunho validado no backend;
@@ -177,6 +177,12 @@ botões **Criar cobrança** e **Cancelar**. A proposta:
 O clique **Criar cobrança** usa o mesmo serviço `createCharge` do Dashboard.
 Assim, regras de cliente, Pix, pagamento, eventos e validações permanecem iguais
 nos dois canais. O clique **Cancelar** não cria cobrança.
+
+O clique **Editar dados** cancela a proposta exibida e transforma seus dados em
+memória de edição por 10 minutos. A resposta seguinte pode alterar um ou vários
+campos em linguagem natural; campos não mencionados são preservados. Ao trocar
+o cliente, o WhatsApp anterior não é herdado. Depois da validação, o assistente
+envia uma nova proposta completa para revisão.
 
 ## Guardrail de custo e abuso
 
@@ -250,8 +256,9 @@ conversas fora da janela permitida pela Meta.
 3. confirme o callback e a assinatura `messages` na Meta;
 4. envie uma solicitação pelo número permitido;
 5. confira o rascunho e os botões;
-6. clique em **Criar cobrança**;
-7. confira a mensagem de sucesso, o link de pagamento e o registro no Dashboard.
+6. clique em **Editar dados** e responda, por exemplo, “valor para R$ 120”;
+7. confira o novo rascunho e clique em **Criar cobrança**;
+8. confira a mensagem de sucesso, o link de pagamento e o registro no Dashboard.
 
 Verificações locais:
 
