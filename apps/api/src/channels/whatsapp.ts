@@ -65,7 +65,7 @@ export type InboundMessage = {
   buttonId: string;
 };
 
-export type WhatsAppChargeAction = "create" | "cancel";
+export type WhatsAppChargeAction = "create" | "edit" | "cancel";
 
 function messageReceivedAt(timestamp: unknown): string | undefined {
   if (typeof timestamp !== "string" || !/^\d+$/.test(timestamp)) return undefined;
@@ -83,7 +83,7 @@ export function whatsappChargeActionId(
 export function parseWhatsAppChargeAction(
   buttonId: string,
 ): { action: WhatsAppChargeAction; proposalId: string } | undefined {
-  const match = /^charge:(create|cancel):([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.exec(buttonId);
+  const match = /^charge:(create|edit|cancel):([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.exec(buttonId);
   if (!match) return undefined;
   return {
     action: match[1] as WhatsAppChargeAction,
@@ -110,6 +110,13 @@ export function chargeConfirmationPayload(
             reply: {
               id: whatsappChargeActionId("create", proposalId),
               title: "Criar cobrança",
+            },
+          },
+          {
+            type: "reply",
+            reply: {
+              id: whatsappChargeActionId("edit", proposalId),
+              title: "Editar dados",
             },
           },
           {

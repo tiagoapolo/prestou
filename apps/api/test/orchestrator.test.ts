@@ -12,13 +12,27 @@ function fixedLlm(call: LlmToolCall): LlmProvider {
   return { interpret: async () => call };
 }
 
-function memoryStore(): ChargeMemory & { data: Map<string, PartialCharge> } {
+function memoryStore(): ChargeMemory & {
+  data: Map<string, PartialCharge>;
+  modes: Map<string, "fill" | "edit">;
+} {
   const data = new Map<string, PartialCharge>();
+  const modes = new Map<string, "fill" | "edit">();
   return {
     data,
-    load: async (id) => data.get(id) ?? null,
-    save: async (id, partial) => { data.set(id, partial); },
-    clear: async (id) => { data.delete(id); },
+    modes,
+    load: async (id) => {
+      const partial = data.get(id);
+      return partial ? { partial, mode: modes.get(id) ?? "fill" } : null;
+    },
+    save: async (id, entry) => {
+      data.set(id, entry.partial);
+      modes.set(id, entry.mode);
+    },
+    clear: async (id) => {
+      data.delete(id);
+      modes.delete(id);
+    },
   };
 }
 
@@ -232,6 +246,95 @@ test("telefone inválido mantém o rascunho e pede um WhatsApp válido", async (
   assert.equal(result.kind, "clarification");
   assert.match(result.message, /WhatsApp válido com DDD/);
   assert.equal(memory.data.has("provider-1"), true);
+});
+
+test("edição altera somente os campos informados e reapresenta o rascunho", async () => {
+  const memory = memoryStore();
+  memory.data.set("provider-1", {
+    clientName: "João da Silva",
+    clientWhatsapp: "11988887777",
+    description: "Lavagem",
+    amountCents: 8000,
+    dueDate: "2026-07-30",
+  });
+  memory.modes.set("provider-1", "edit");
+
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "120",
+    deps: deps(),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    now: new Date("2026-07-22T12:00:00Z"),
+    memory,
+    llm: {
+      interpret: async (request) => {
+        assert.match(request.instructions, /cobrança em edição/);
+        return {
+          name: "preparar_cobranca",
+          arguments: {
+            clientName: null,
+            clientWhatsapp: null,
+            description: null,
+            amountCents: 12000,
+            dueDate: null,
+          },
+        };
+      },
+    },
+  });
+
+  assert.equal(result.kind, "draft");
+  if (result.kind !== "draft") return;
+  assert.equal(result.draft.client.name, "João da Silva");
+  assert.equal(result.draft.description, "Lavagem");
+  assert.equal(result.draft.amountCents, 12000);
+  assert.equal(result.draft.dueDate, "2026-07-30");
+  assert.equal(memory.data.has("provider-1"), false);
+});
+
+test("edição troca o cliente sem herdar o WhatsApp anterior", async () => {
+  const memory = memoryStore();
+  memory.data.set("provider-1", {
+    clientName: "João da Silva",
+    clientWhatsapp: "11988887777",
+    description: "Lavagem",
+    amountCents: 8000,
+    dueDate: "2026-07-30",
+  });
+  memory.modes.set("provider-1", "edit");
+  const maria = {
+    id: "047f34ac-60ab-40d2-81f2-a05e72d10d89",
+    name: "Maria Souza",
+    whatsapp: "11977776666",
+  };
+
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "troque o cliente para Maria Souza",
+    deps: deps({ listClients: async () => [...clients, maria] }),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    now: new Date("2026-07-22T12:00:00Z"),
+    memory,
+    llm: fixedLlm({
+      name: "preparar_cobranca",
+      arguments: {
+        clientName: "Maria Souza",
+        clientWhatsapp: null,
+        description: null,
+        amountCents: null,
+        dueDate: null,
+      },
+    }),
+  });
+
+  assert.equal(result.kind, "draft");
+  if (result.kind !== "draft") return;
+  assert.deepEqual(result.draft.client, maria);
+  assert.equal(result.draft.description, "Lavagem");
+  assert.equal(result.draft.amountCents, 8000);
+  assert.equal(result.draft.dueDate, "2026-07-30");
 });
 
 test("trocar de assunto descarta o rascunho pendente", async () => {

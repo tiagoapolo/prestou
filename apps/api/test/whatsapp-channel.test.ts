@@ -129,13 +129,17 @@ test("ação e payload dos botões usam somente o ID da proposta", () => {
     action: "create",
     proposalId,
   });
+  assert.deepEqual(parseWhatsAppChargeAction(whatsappChargeActionId("edit", proposalId)), {
+    action: "edit",
+    proposalId,
+  });
   assert.equal(parseWhatsAppChargeAction("charge:create:inválido"), undefined);
 
   const payload = chargeConfirmationPayload("5511988887777", "Confirme", proposalId);
   assert.equal(payload.type, "interactive");
   assert.deepEqual(
     payload.interactive.action.buttons.map((button) => button.reply.title),
-    ["Criar cobrança", "Cancelar"],
+    ["Criar cobrança", "Editar dados", "Cancelar"],
   );
   assert.equal(JSON.stringify(payload).includes("amountCents"), false);
 });
