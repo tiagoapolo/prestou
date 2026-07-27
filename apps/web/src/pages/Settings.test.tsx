@@ -21,7 +21,18 @@ interface NumberStatus {
   phone: string;
   verified: boolean;
   pendingCandidate: string | null;
+  serviceWindow: {
+    isOpen: boolean;
+    lastInboundAt: string | null;
+    expiresAt: string | null;
+  };
 }
+
+const closedWindow = {
+  isOpen: false,
+  lastInboundAt: null,
+  expiresAt: null,
+};
 
 /**
  * Simula os endpoints da página. O estado do número (`/api/whatsapp/number`) é
@@ -49,6 +60,7 @@ function mockRequests(initial: NumberStatus, confirmError = false, startUnavaila
         phone: status.pendingCandidate ?? status.phone,
         verified: true,
         pendingCandidate: null,
+        serviceWindow: status.serviceWindow,
       };
       return Promise.resolve({ verified: true } as T);
     }
@@ -67,16 +79,33 @@ describe("número do WhatsApp nas configurações", () => {
   afterEach(cleanup);
 
   it("mostra o número e o estado verificado atuais", async () => {
-    mockRequests({ phone: "11987654321", verified: true, pendingCandidate: null });
+    mockRequests({ phone: "11987654321", verified: true, pendingCandidate: null, serviceWindow: closedWindow });
     renderPage();
 
     expect(await screen.findByText("Verificado")).toBeTruthy();
     expect((screen.getByLabelText("Número do WhatsApp") as HTMLInputElement).value).toBe("(11) 98765-4321");
     expect(screen.queryByLabelText("Código de verificação")).toBeNull();
+    expect(screen.getByText(/Janela de atendimento fechada/)).toBeTruthy();
+  });
+
+  it("mostra quando a janela de atendimento está aberta", async () => {
+    mockRequests({
+      phone: "11987654321",
+      verified: true,
+      pendingCandidate: null,
+      serviceWindow: {
+        isOpen: true,
+        lastInboundAt: "2026-07-27T16:00:00.000Z",
+        expiresAt: "2026-07-28T16:00:00.000Z",
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByText(/Janela de atendimento aberta/)).toBeTruthy();
   });
 
   it("envia o código para o número informado e confirma", async () => {
-    mockRequests({ phone: "11988887777", verified: false, pendingCandidate: null });
+    mockRequests({ phone: "11988887777", verified: false, pendingCandidate: null, serviceWindow: closedWindow });
     renderPage();
 
     await screen.findByText("Não verificado");
@@ -101,7 +130,7 @@ describe("número do WhatsApp nas configurações", () => {
   });
 
   it("mantém a confirmação disponível após erro da API e permite tentar novamente", async () => {
-    mockRequests({ phone: "11976543210", verified: false, pendingCandidate: "11976543210" }, true);
+    mockRequests({ phone: "11976543210", verified: false, pendingCandidate: "11976543210", serviceWindow: closedWindow }, true);
     renderPage();
 
     fireEvent.change(await screen.findByLabelText("Código de verificação"), { target: { value: "654321" } });
@@ -115,7 +144,7 @@ describe("número do WhatsApp nas configurações", () => {
   });
 
   it("não afirma que enviou código quando o servidor não reservou o candidato", async () => {
-    mockRequests({ phone: "11987654321", verified: true, pendingCandidate: null }, false, true);
+    mockRequests({ phone: "11987654321", verified: true, pendingCandidate: null, serviceWindow: closedWindow }, false, true);
     renderPage();
 
     fireEvent.change(await screen.findByLabelText("Número do WhatsApp"), {

@@ -2,6 +2,7 @@ import { config } from "./config.js";
 import { db } from "./db.js";
 import { newId } from "./ids.js";
 import type { ProviderRow } from "./types.js";
+import { assertWhatsAppServiceWindowOpen } from "./whatsapp-service-window.js";
 
 export type NotificationKind =
   | "client_confirmed" // cliente tocou "já paguei"
@@ -196,6 +197,8 @@ async function sendViaCloudApi(input: NotifyInput): Promise<void> {
     });
     return;
   }
+
+  await assertWhatsAppServiceWindowOpen(to);
 
   const res = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
     method: "POST",

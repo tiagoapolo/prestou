@@ -54,16 +54,24 @@ export function verifySignature(
 export type InboundMessage = {
   id: string;
   from: string;
+  receivedAt?: string;
   kind: "text";
   text: string;
 } | {
   id: string;
   from: string;
+  receivedAt?: string;
   kind: "button";
   buttonId: string;
 };
 
 export type WhatsAppChargeAction = "create" | "cancel";
+
+function messageReceivedAt(timestamp: unknown): string | undefined {
+  if (typeof timestamp !== "string" || !/^\d+$/.test(timestamp)) return undefined;
+  const receivedAt = new Date(Number(timestamp) * 1000);
+  return Number.isNaN(receivedAt.getTime()) ? undefined : receivedAt.toISOString();
+}
 
 export function whatsappChargeActionId(
   action: WhatsAppChargeAction,
@@ -157,15 +165,24 @@ export function parseInboundMessage(payload: unknown): InboundMessage | undefine
       for (const message of messages) {
         const id = (message as { id?: unknown }).id;
         const from = (message as { from?: unknown }).from;
+        const receivedAt = messageReceivedAt(
+          (message as { timestamp?: unknown }).timestamp,
+        );
         const text = (message as { text?: { body?: unknown } }).text?.body;
         if (typeof id === "string" && typeof from === "string" && typeof text === "string" && text.trim()) {
-          return { id, from, kind: "text", text: text.trim() };
+          return {
+            id,
+            from,
+            ...(receivedAt ? { receivedAt } : {}),
+            kind: "text",
+            text: text.trim(),
+          };
         }
         const buttonId = (
           message as { interactive?: { button_reply?: { id?: unknown } } }
         ).interactive?.button_reply?.id;
         if (typeof id === "string" && typeof from === "string" && typeof buttonId === "string" && buttonId) {
-          return { id, from, kind: "button", buttonId };
+          return { id, from, ...(receivedAt ? { receivedAt } : {}), kind: "button", buttonId };
         }
         const templateButtonPayload = (
           message as { button?: { payload?: unknown } }
@@ -174,7 +191,13 @@ export function parseInboundMessage(payload: unknown): InboundMessage | undefine
           typeof id === "string" && typeof from === "string" &&
           typeof templateButtonPayload === "string" && templateButtonPayload
         ) {
-          return { id, from, kind: "button", buttonId: templateButtonPayload };
+          return {
+            id,
+            from,
+            ...(receivedAt ? { receivedAt } : {}),
+            kind: "button",
+            buttonId: templateButtonPayload,
+          };
         }
       }
     }
