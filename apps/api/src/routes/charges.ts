@@ -65,7 +65,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
   /** Clientes já cadastrados (para reaproveitar no cadastro de cobrança). */
   app.get("/api/clients", async (req) => {
     const rows = await queryAll<ClientRow>(
-      "SELECT * FROM clients WHERE provider_id = ? ORDER BY name",
+      "SELECT * FROM clients WHERE provider_id = ? AND saved_for_future = true ORDER BY name",
       req.provider!.id,
     );
     return {

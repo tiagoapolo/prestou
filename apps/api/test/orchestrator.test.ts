@@ -5,6 +5,7 @@ import {
   type AssistantDeps,
   type ChargeMemory,
   type PartialCharge,
+  type PhoneConfirmation,
 } from "../src/orchestrator.ts";
 import type { LlmProvider, LlmToolCall } from "../src/llm.ts";
 
@@ -15,23 +16,36 @@ function fixedLlm(call: LlmToolCall): LlmProvider {
 function memoryStore(): ChargeMemory & {
   data: Map<string, PartialCharge>;
   modes: Map<string, "fill" | "edit">;
+  confirmations: Map<string, PhoneConfirmation>;
 } {
   const data = new Map<string, PartialCharge>();
   const modes = new Map<string, "fill" | "edit">();
+  const confirmations = new Map<string, PhoneConfirmation>();
   return {
     data,
     modes,
+    confirmations,
     load: async (id) => {
       const partial = data.get(id);
-      return partial ? { partial, mode: modes.get(id) ?? "fill" } : null;
+      const phoneConfirmation = confirmations.get(id);
+      return partial
+        ? {
+            partial,
+            mode: modes.get(id) ?? "fill",
+            ...(phoneConfirmation ? { phoneConfirmation } : {}),
+          }
+        : null;
     },
     save: async (id, entry) => {
       data.set(id, entry.partial);
       modes.set(id, entry.mode);
+      if (entry.phoneConfirmation) confirmations.set(id, entry.phoneConfirmation);
+      else confirmations.delete(id);
     },
     clear: async (id) => {
       data.delete(id);
       modes.delete(id);
+      confirmations.delete(id);
     },
   };
 }
@@ -246,6 +260,99 @@ test("telefone inválido mantém o rascunho e pede um WhatsApp válido", async (
   assert.equal(result.kind, "clarification");
   assert.match(result.message, /WhatsApp válido com DDD/);
   assert.equal(memory.data.has("provider-1"), true);
+});
+
+test("confirma o número divergente e reutiliza o cliente encontrado", async () => {
+  const memory = memoryStore();
+  const maria = {
+    id: "38bb7152-38cf-491d-9dc4-d762f59bb4fc",
+    name: "Maria",
+    whatsapp: "11977776666",
+  };
+  const base = {
+    providerId: "provider-1",
+    deps: deps({ listClients: async () => [...clients, maria] }),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    now: new Date("2026-07-22T12:00:00Z"),
+    memory,
+  };
+
+  const first = await interpretMessage({
+    ...base,
+    message: "cobra 80 do João no 11977776666",
+    llm: fixedLlm({
+      name: "preparar_cobranca",
+      arguments: {
+        clientName: "João",
+        clientWhatsapp: "11977776666",
+        description: "Lavagem",
+        amountCents: 8000,
+        dueDate: "2026-07-30",
+      },
+    }),
+  });
+
+  assert.equal(first.kind, "clarification");
+  assert.equal(
+    first.message,
+    "O número 11977776666 está correto e pertence a Maria? Responda sim ou não.",
+  );
+  assert.equal(memory.confirmations.get("provider-1")?.clientId, maria.id);
+
+  const second = await interpretMessage({
+    ...base,
+    message: "sim, está correto",
+    llm: { interpret: async () => {
+      throw new Error("a confirmação não deve voltar ao classificador");
+    } },
+  });
+
+  assert.equal(second.kind, "draft");
+  if (second.kind !== "draft") return;
+  assert.deepEqual(second.draft.client, maria);
+  assert.equal(second.draft.description, "Lavagem");
+  assert.equal(memory.data.has("provider-1"), false);
+});
+
+test("nega o número divergente e aguarda o WhatsApp correto", async () => {
+  const memory = memoryStore();
+  const maria = {
+    id: "38bb7152-38cf-491d-9dc4-d762f59bb4fc",
+    name: "Maria",
+    whatsapp: "11977776666",
+  };
+  memory.data.set("provider-1", {
+    clientName: "João",
+    clientWhatsapp: maria.whatsapp,
+    description: "Lavagem",
+    amountCents: 8000,
+    dueDate: "2026-07-30",
+  });
+  memory.confirmations.set("provider-1", {
+    clientId: maria.id,
+    clientName: maria.name,
+    whatsapp: maria.whatsapp,
+  });
+
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "não",
+    deps: deps({ listClients: async () => [...clients, maria] }),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    memory,
+    llm: { interpret: async () => {
+      throw new Error("a negativa não deve voltar ao classificador");
+    } },
+  });
+
+  assert.deepEqual(result, {
+    kind: "clarification",
+    message: "Tudo bem. Informe o WhatsApp correto de João.",
+  });
+  assert.equal(memory.data.get("provider-1")?.clientWhatsapp, null);
+  assert.equal(memory.confirmations.has("provider-1"), false);
 });
 
 test("edição altera somente os campos informados e reapresenta o rascunho", async () => {

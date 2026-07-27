@@ -178,6 +178,11 @@ O clique **Criar cobrança** usa o mesmo serviço `createCharge` do Dashboard.
 Assim, regras de cliente, Pix, pagamento, eventos e validações permanecem iguais
 nos dois canais. O clique **Cancelar** não cria cobrança.
 
+Quando o WhatsApp informado já pertence a um cliente cujo nome diverge do
+pedido, o assistente pergunta apenas se o número está correto e pertence ao
+cliente encontrado. Uma confirmação reutiliza esse cadastro; uma negativa
+mantém o rascunho e aguarda o número correto.
+
 O clique **Editar dados** cancela a proposta exibida e transforma seus dados em
 memória de edição por 10 minutos. A resposta seguinte pode alterar um ou vários
 campos em linguagem natural; campos não mencionados são preservados. Ao trocar

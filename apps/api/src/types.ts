@@ -31,6 +31,7 @@ export interface ClientRow {
   provider_id: string;
   name: string;
   whatsapp: string;
+  saved_for_future: boolean;
   created_at: string;
 }
 

@@ -1,6 +1,11 @@
 import { db, execute, queryOne, type DatabaseClient } from "./db.js";
 import type { ChargeDraftInput } from "./charge-creation.js";
-import type { ChargeMemory, ChargeMemoryEntry } from "./orchestrator.js";
+import type {
+  ChargeMemory,
+  ChargeMemoryEntry,
+  PartialCharge,
+  PhoneConfirmation,
+} from "./orchestrator.js";
 
 /**
  * Janela em que um preenchimento de cobrança em andamento continua válido. Curta
@@ -18,6 +23,10 @@ interface PendingRow {
 function persistedJson(value: unknown): unknown {
   return typeof value === "string" ? JSON.parse(value) : value;
 }
+
+type PersistedPartial = PartialCharge & {
+  _phoneConfirmation?: PhoneConfirmation;
+};
 
 /**
  * Memória real do preenchimento de cobrança: um único rascunho parcial por
@@ -38,7 +47,12 @@ export async function savePendingCharge(
        expires_at = excluded.expires_at,
        updated_at = CURRENT_TIMESTAMP`,
     providerId,
-    JSON.stringify(entry.partial),
+    JSON.stringify({
+      ...entry.partial,
+      ...(entry.phoneConfirmation
+        ? { _phoneConfirmation: entry.phoneConfirmation }
+        : {}),
+    }),
     entry.mode,
   );
 }
@@ -73,9 +87,12 @@ export const dbChargeMemory: ChargeMemory = {
       providerId,
     );
     if (!row) return null;
+    const persisted = persistedJson(row.partial) as PersistedPartial;
+    const { _phoneConfirmation, ...partial } = persisted;
     return {
-      partial: persistedJson(row.partial) as ChargeMemoryEntry["partial"],
+      partial,
       mode: row.mode === "edit" ? "edit" : "fill",
+      ...(_phoneConfirmation ? { phoneConfirmation: _phoneConfirmation } : {}),
     };
   },
 

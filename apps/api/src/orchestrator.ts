@@ -28,7 +28,7 @@ export interface ChargeDraft {
 
 export type AssistantResult =
   | { kind: "draft"; message: string; draft: ChargeDraft }
-  | { kind: "clarification"; message: string }
+  | { kind: "clarification"; message: string; confirmation?: "client_phone" }
   | { kind: "text"; message: string; classification?: "unsupported" };
 
 /** Cobrança em atraso, já resolvida e formatável pelo backend. */
@@ -74,9 +74,16 @@ export type PartialCharge = z.infer<typeof extractedChargeSchema>;
 
 export type ChargeMemoryMode = "fill" | "edit";
 
+export interface PhoneConfirmation {
+  clientId: string;
+  clientName: string;
+  whatsapp: string;
+}
+
 export interface ChargeMemoryEntry {
   partial: PartialCharge;
   mode: ChargeMemoryMode;
+  phoneConfirmation?: PhoneConfirmation;
 }
 
 /**
@@ -186,6 +193,22 @@ function looksLikeStandaloneWhatsapp(message: string): boolean {
   return /\d/.test(message) && /^[\d\s()+.-]+$/.test(message);
 }
 
+function normalizedReply(value: string): string {
+  return normalizedName(value).replace(/[.!?]+$/g, "");
+}
+
+function isAffirmativeReply(value: string): boolean {
+  return /^(sim|s|isso|correto|correta|confirmo|confirmado)\b/.test(normalizedReply(value));
+}
+
+function isNegativeReply(value: string): boolean {
+  return /^(nao|n|errado|errada|incorreto|incorreta)\b/.test(normalizedReply(value));
+}
+
+function phoneConfirmationMessage(confirmation: PhoneConfirmation): string {
+  return `O número ${confirmation.whatsapp} está correto e pertence a ${confirmation.clientName}? Responda sim ou não.`;
+}
+
 function validText(value: string | null, label: string, min: number, max: number): string | null {
   if (value === null) return null;
   const parsed = requiredText(label, min, max).safeParse(value);
@@ -248,6 +271,7 @@ export function buildDraft(
   extracted: z.infer<typeof extractedChargeSchema>,
   clients: AssistantClient[],
   defaultDueDate: string,
+  options: { confirmedClientId?: string; requestPhoneConfirmation?: boolean } = {},
 ): AssistantResult {
   const missing: string[] = [];
   const clientName = validText(extracted.clientName, "Nome do cliente", 2, 80);
@@ -275,7 +299,19 @@ export function buildDraft(
     ? clients.find((client) => client.whatsapp === whatsapp.data)
     : undefined;
   const byName = matchingClients(clients, clientName);
-  if (byPhone && matchingClients([byPhone], clientName).length === 0) {
+  const phoneMismatch = byPhone && matchingClients([byPhone], clientName).length === 0;
+  if (phoneMismatch && options.confirmedClientId !== byPhone.id) {
+    if (options.requestPhoneConfirmation) {
+      return {
+        kind: "clarification",
+        message: phoneConfirmationMessage({
+          clientId: byPhone.id,
+          clientName: byPhone.name,
+          whatsapp: byPhone.whatsapp,
+        }),
+        confirmation: "client_phone",
+      };
+    }
     return clarification(["o nome e o WhatsApp do cliente, pois correspondem a cadastros diferentes"]);
   }
   if (!byPhone && byName.length > 1 && !whatsapp?.success) {
@@ -401,6 +437,49 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
   const llm = input.llm ?? openAiProvider;
 
   const pendingEntry = input.memory ? await input.memory.load(input.providerId) : null;
+  const defaultDueDate = addDaysISO(today, input.defaultDueDays ?? 0);
+
+  if (pendingEntry?.phoneConfirmation && input.memory) {
+    if (isNegativeReply(input.message)) {
+      const partial = { ...pendingEntry.partial, clientWhatsapp: null };
+      await input.memory.save(input.providerId, { partial, mode: "fill" });
+      return {
+        kind: "clarification",
+        message: `Tudo bem. Informe o WhatsApp correto de ${partial.clientName}.`,
+      };
+    }
+
+    if (!isAffirmativeReply(input.message)) {
+      return {
+        kind: "clarification",
+        message: phoneConfirmationMessage(pendingEntry.phoneConfirmation),
+        confirmation: "client_phone",
+      };
+    }
+
+    const clients = await input.deps.listClients(input.providerId);
+    const confirmedClient = clients.find(
+      (client) =>
+        client.id === pendingEntry.phoneConfirmation!.clientId &&
+        client.whatsapp === pendingEntry.phoneConfirmation!.whatsapp,
+    );
+    if (!confirmedClient) {
+      const partial = { ...pendingEntry.partial, clientWhatsapp: null };
+      await input.memory.save(input.providerId, { partial, mode: "fill" });
+      return {
+        kind: "clarification",
+        message: `Esse cadastro não está mais disponível. Informe o WhatsApp correto de ${partial.clientName}.`,
+      };
+    }
+
+    const result = buildDraft(pendingEntry.partial, clients, defaultDueDate, {
+      confirmedClientId: confirmedClient.id,
+      requestPhoneConfirmation: true,
+    });
+    if (result.kind === "draft") await input.memory.clear(input.providerId);
+    return result;
+  }
+
   // Uma resposta contendo só o telefone é inequívoca quando é exatamente o
   // campo que falta no preenchimento normal. Na edição, um número isolado pode
   // ser o novo valor e precisa voltar ao classificador.
@@ -453,13 +532,30 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
       const memoryMode = pendingEntry?.mode ?? "fill";
       const merged = mergeCharge(pendingEntry?.partial ?? null, extracted.data, memoryMode);
       const clients = await input.deps.listClients(input.providerId);
-      const defaultDueDate = addDaysISO(today, input.defaultDueDays ?? 0);
-      const result = buildDraft(merged, clients, defaultDueDate);
+      const result = buildDraft(merged, clients, defaultDueDate, {
+        requestPhoneConfirmation: Boolean(input.memory),
+      });
       if (input.memory) {
         // Ainda falta algo → guarda o parcial para a próxima mensagem retomar;
         // rascunho pronto (ou erro de campo) → o preenchimento terminou.
         if (result.kind === "clarification") {
-          await input.memory.save(input.providerId, { partial: merged, mode: memoryMode });
+          const byPhone = mobileSchema.safeParse(merged.clientWhatsapp);
+          const matchedClient = result.confirmation === "client_phone" && byPhone.success
+            ? clients.find((client) => client.whatsapp === byPhone.data)
+            : undefined;
+          await input.memory.save(input.providerId, {
+            partial: merged,
+            mode: memoryMode,
+            ...(matchedClient
+              ? {
+                  phoneConfirmation: {
+                    clientId: matchedClient.id,
+                    clientName: matchedClient.name,
+                    whatsapp: matchedClient.whatsapp,
+                  },
+                }
+              : {}),
+          });
         } else {
           await input.memory.clear(input.providerId);
         }

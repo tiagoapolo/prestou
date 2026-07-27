@@ -4,6 +4,7 @@ import { api } from "../api";
 import { ErrorNotice } from "../components";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,6 +36,7 @@ export function NewChargePage() {
   const [error, setError] = useState("");
   const [clientName, setClientName] = useState(assistantDraft?.client.name ?? "");
   const [clientWhatsapp, setClientWhatsapp] = useState(() => formatMobile(assistantDraft?.client.whatsapp ?? ""));
+  const [saveClient, setSaveClient] = useState(false);
   const [description, setDescription] = useState(assistantDraft?.description ?? "");
   const [amount, setAmount] = useState(() => assistantDraft ? formatMoney(String(assistantDraft.amountCents)) : "");
   const [dueDate, setDueDate] = useState(() => isoToDate(
@@ -81,7 +83,7 @@ export function NewChargePage() {
     }
     const client = selected ? { id: selected } : { name: clientName, whatsapp: normalizeMobile(clientWhatsapp) };
     try {
-      const result = await api<Created>("/api/charges", { method: "POST", body: JSON.stringify({ client, description, amountCents, dueDate: dueDateISO, fillMs: Date.now() - started.current, source: assistantDraft ? "assistant" : "form" }) });
+      const result = await api<Created>("/api/charges", { method: "POST", body: JSON.stringify({ client, description, amountCents, dueDate: dueDateISO, saveClient: selected ? true : saveClient, fillMs: Date.now() - started.current, source: assistantDraft ? "assistant" : "form" }) });
       setCreated(result);
     } catch (err) { setError(userMessage(err, "Não foi possível criar a cobrança. Tente novamente.")); }
     finally { setBusy(false); }
@@ -106,6 +108,7 @@ export function NewChargePage() {
     <Card asChild className="form-card"><form className="stack" onSubmit={submit}>
       <Label>Cliente já cadastrado<Select disabled={clientsLoading} value={clientsLoading ? "loading" : selected || "new"} onValueChange={(value) => setSelected(value === "new" ? "" : value)}><SelectTrigger aria-label={clientsLoading ? "Carregando clientes" : "Selecionar cliente"}><SelectValue /></SelectTrigger><SelectContent>{clientsLoading ? <SelectItem value="loading">Carregando clientes…</SelectItem> : <><SelectItem value="new">Novo cliente</SelectItem>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} · {c.whatsapp}</SelectItem>)}</>}</SelectContent></Select></Label>
       {!selected && <div className="two-fields"><Label>Nome do cliente<Input name="clientName" required minLength={2} maxLength={80} value={clientName} onChange={(event) => setClientName(event.target.value)} /></Label><Label>WhatsApp<Input name="clientWhatsapp" inputMode="numeric" autoComplete="tel-national" required placeholder="(11) 99999-9999" value={clientWhatsapp} onChange={(event) => setClientWhatsapp(formatMobile(event.target.value))} maxLength={15} pattern="\([1-9][0-9]\) 9[0-9]{4}-[0-9]{4}" title="Informe um celular válido com DDD" /></Label></div>}
+      {!selected && <Label className="check-row"><Checkbox checked={saveClient} onCheckedChange={(checked) => setSaveClient(checked === true)} /> <span>Salvar cliente para futuros serviços</span></Label>}
       <Label>Serviço<Input name="description" required minLength={2} maxLength={120} placeholder="Ex.: corte de grama" value={description} onChange={(event) => setDescription(event.target.value)} /></Label>
       <div className="two-fields"><Label>Valor (R$)<Input name="amount" required inputMode="numeric" placeholder="150,00" value={amount} onChange={(event) => setAmount(formatMoney(event.target.value))} maxLength={9} /></Label><Label>Vencimento<Input name="dueDate" required inputMode="numeric" placeholder="DD/MM/AAAA" value={dueDate} onChange={(event) => setDueDate(formatDate(event.target.value))} maxLength={10} pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" title="Informe uma data válida no formato DD/MM/AAAA" /></Label></div>
       {error && <ErrorNotice message={error} />}

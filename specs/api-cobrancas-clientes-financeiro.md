@@ -31,7 +31,9 @@ tags:
 GET /api/clients
 ```
 
-Retorna todos os clientes do prestador autenticado, ordenados por nome. O endpoint é usado para reaproveitar um cliente ao criar uma cobrança.
+Retorna os clientes que o prestador escolheu salvar para uso futuro, ordenados
+por nome. Clientes mantidos apenas no histórico de uma cobrança não aparecem
+nesta lista.
 
 ```json
 {

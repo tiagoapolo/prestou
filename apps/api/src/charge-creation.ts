@@ -16,9 +16,10 @@ export const chargeDraftSchema = z.object({
   description: requiredText("Serviço", 2, 120),
   amountCents: amountCentsSchema,
   dueDate: isoDateSchema,
+  saveClient: z.boolean().default(true),
 });
 
-export type ChargeDraftInput = z.infer<typeof chargeDraftSchema>;
+export type ChargeDraftInput = z.input<typeof chargeDraftSchema>;
 export type ChargeSource = "form" | "assistant" | "whatsapp";
 
 export interface CreatedCharge {
@@ -42,6 +43,7 @@ async function findOrCreateClient(
   tx: DatabaseClient,
   provider: ProviderRow,
   input: ChargeDraftInput["client"],
+  saveForFuture: boolean,
 ): Promise<ClientRow> {
   if (input.id) {
     const existing = await tx.queryOne<ClientRow>(
@@ -63,19 +65,37 @@ async function findOrCreateClient(
     provider.id,
     input.whatsapp,
   );
-  if (byPhone) return byPhone;
+  if (byPhone) {
+    if (saveForFuture && !byPhone.saved_for_future) {
+      await tx.execute(
+        "UPDATE clients SET saved_for_future = true WHERE id = ? AND provider_id = ?",
+        byPhone.id,
+        provider.id,
+      );
+      return { ...byPhone, saved_for_future: true };
+    }
+    return byPhone;
+  }
 
   const id = newId();
   const now = new Date().toISOString();
   await tx.execute(
-    "INSERT INTO clients (id, provider_id, name, whatsapp, created_at) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO clients (id, provider_id, name, whatsapp, saved_for_future, created_at) VALUES (?, ?, ?, ?, ?, ?)",
     id,
     provider.id,
     input.name,
     input.whatsapp,
+    saveForFuture,
     now,
   );
-  return { id, provider_id: provider.id, name: input.name, whatsapp: input.whatsapp, created_at: now };
+  return {
+    id,
+    provider_id: provider.id,
+    name: input.name,
+    whatsapp: input.whatsapp,
+    saved_for_future: saveForFuture,
+    created_at: now,
+  };
 }
 
 export async function createCharge(
@@ -85,7 +105,7 @@ export async function createCharge(
   source: ChargeSource,
   fillMs?: number,
 ): Promise<CreatedCharge> {
-  const client = await findOrCreateClient(tx, provider, input.client);
+  const client = await findOrCreateClient(tx, provider, input.client, input.saveClient ?? true);
 
   let brCode: string;
   try {
