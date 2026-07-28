@@ -26,6 +26,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = integrationEnv.serviceRoleKey;
 // template, a propagação de falha e a redação do código.
 process.env.WHATSAPP_MODE = "cloud-api";
 process.env.WHATSAPP_PHONE_NUMBER_ID = "test-phone-id";
+process.env.WHATSAPP_PUBLIC_PHONE = "5541963491134";
 process.env.WHATSAPP_ACCESS_TOKEN = "test-access-token";
 process.env.WHATSAPP_AUTH_TEMPLATE = "prestou_codigo_verificacao";
 process.env.WHATSAPP_APP_SECRET = "test-app-secret";
@@ -351,6 +352,24 @@ test("administrador cria, lista e revoga convite para um número", async () => {
       parameters: [{ type: "payload", payload: "signup:confirm" }],
     }],
   });
+
+  const manualPhone = "11932220003";
+  const manual = await app.inject({
+    method: "POST",
+    url: "/api/admin/whatsapp-invites",
+    headers: authHeader(inviter.token),
+    payload: { phone: manualPhone, expiresInDays: 7, manual: true },
+  });
+  assert.equal(manual.statusCode, 201);
+  assert.equal(manual.json().invite.phone, manualPhone);
+  assert.equal(manual.json().invite.status, "pending");
+  assert.equal(
+    manual.json().manualMessage,
+    "Olá! Você recebeu um convite para criar sua conta no Prestou. " +
+      "Para confirmar que este WhatsApp é seu e continuar o cadastro, " +
+      "toque no link e envie a mensagem pronta: https://wa.me/5541963491134?text=Oi",
+  );
+  assert.equal(sentTemplates.has(`55${manualPhone}`), false);
 
   const listed = await app.inject({
     method: "GET",

@@ -55,6 +55,7 @@ Básico → Chave secreta do app** e deve ser armazenado somente como
 ```env
 WHATSAPP_MODE=cloud-api
 WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_PUBLIC_PHONE=5541963491134
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_TEMPLATE_LANG=pt_BR
 WHATSAPP_VERIFY_TOKEN=
@@ -120,6 +121,12 @@ Ao criar um convite no painel administrativo, a API:
 3. envia o template `convite_prestador` em `pt_BR`;
 4. retorna `201` somente quando a Meta aceita o envio;
 5. revoga o convite novo e retorna `502` se a entrega for rejeitada.
+
+Com **Envio manual** habilitado no painel, a API apenas grava o convite como
+`pending` e devolve uma mensagem pronta para copiar. A mensagem contém um link
+`wa.me` para o número público do Prestou (`WHATSAPP_PUBLIC_PHONE`) com “Oi”
+preenchido; o convidado ainda precisa tocar em enviar para que o webhook
+reivindique o convite. Nesse modo não há chamada de saída para a Meta.
 
 O template não comprova posse do telefone. A comprovação nasce quando o número
 convidado responde “Oi”/“Sim” ou toca no quick reply **Confirmar cadastro**. O

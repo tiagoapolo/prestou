@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { Trash2 } from "lucide-react";
+import { Check, Copy, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ErrorNotice, Spinner } from "../components";
@@ -37,6 +37,9 @@ interface ProvidersPage {
 export function AdminPage() {
   const { provider } = useAuth();
   const [invitePhone, setInvitePhone] = useState("");
+  const [manualInvite, setManualInvite] = useState(false);
+  const [manualInviteMessage, setManualInviteMessage] = useState("");
+  const [manualMessageCopied, setManualMessageCopied] = useState(false);
   const [invites, setInvites] = useState<WhatsappInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -133,16 +136,33 @@ export function AdminPage() {
     }
     setBusy(true);
     try {
-      await api("/api/admin/whatsapp-invites", {
+      const result = await api<{ manualMessage?: string }>("/api/admin/whatsapp-invites", {
         method: "POST",
-        body: JSON.stringify({ phone: normalizeMobile(invitePhone), expiresInDays: 7 }),
+        body: JSON.stringify({
+          phone: normalizeMobile(invitePhone),
+          expiresInDays: 7,
+          manual: manualInvite,
+        }),
       });
       setInvitePhone("");
+      setManualInviteMessage(result.manualMessage ?? "");
+      setManualMessageCopied(false);
       await loadInvites();
     } catch (cause) {
       setError(userMessage(cause, "Não foi possível criar o convite."));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyManualInviteMessage() {
+    setError("");
+    try {
+      await navigator.clipboard.writeText(manualInviteMessage);
+      setManualMessageCopied(true);
+    } catch {
+      setManualMessageCopied(false);
+      setError("Não foi possível copiar a mensagem. Tente novamente.");
     }
   }
 
@@ -260,9 +280,34 @@ export function AdminPage() {
           só é ativado quando o próprio número responde ou toca em “Confirmar cadastro”.
         </p>
         <form onSubmit={createInvite} className="stack">
-          <Label>Número convidado<Input required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={invitePhone} onChange={(event) => setInvitePhone(formatMobile(event.target.value))} maxLength={15} /></Label>
+          <div className="invite-create-row">
+            <Label>Número convidado<Input required inputMode="numeric" autoComplete="tel-national" placeholder="(11) 99999-9999" value={invitePhone} onChange={(event) => setInvitePhone(formatMobile(event.target.value))} maxLength={15} /></Label>
+            <label className="invite-manual-toggle">
+              <span>Envio manual</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={manualInvite}
+                onChange={(event) => setManualInvite(event.target.checked)}
+              />
+              <span className="invite-toggle-track" aria-hidden="true"><span /></span>
+            </label>
+          </div>
+          {manualInvite && <small>A mensagem não será enviada automaticamente. Você poderá copiá-la após criar o convite.</small>}
           <Button variant="outline" loading={busy} loadingLabel="Convidando…">Criar convite</Button>
         </form>
+        {manualInviteMessage && (
+          <Button
+            type="button"
+            variant="link"
+            className="invite-copy-message"
+            aria-live="polite"
+            onClick={() => void copyManualInviteMessage()}
+          >
+            {manualMessageCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            {manualMessageCopied ? "Mensagem copiada!" : "Copiar mensagem de convite"}
+          </Button>
+        )}
         {error && <ErrorNotice message={error} />}
         {loading && <Spinner label="Carregando convites…" />}
         {!loading && invites.length > 0 && <div className="stack">

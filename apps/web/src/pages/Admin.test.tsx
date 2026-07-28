@@ -11,6 +11,7 @@ vi.mock("../auth", () => ({
 }));
 
 const mockApi = vi.mocked(api);
+const writeClipboard = vi.fn();
 
 function renderPage() {
   render(
@@ -26,7 +27,12 @@ function renderPage() {
 describe("página de administração", () => {
   beforeEach(() => {
     mockApi.mockReset();
+    writeClipboard.mockReset();
     authState.admin = true;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: writeClipboard },
+    });
     HTMLDialogElement.prototype.showModal = function showModal() { this.open = true; };
     HTMLDialogElement.prototype.close = function close() { this.open = false; };
     mockApi.mockImplementation(<T,>(path: string): Promise<T> => {
@@ -88,7 +94,7 @@ describe("página de administração", () => {
       "/api/admin/whatsapp-invites",
       {
         method: "POST",
-        body: JSON.stringify({ phone: "11976543210", expiresInDays: 7 }),
+        body: JSON.stringify({ phone: "11976543210", expiresInDays: 7, manual: false }),
       },
     );
 
@@ -98,6 +104,52 @@ describe("página de administração", () => {
       { method: "POST" },
     ));
     expect(await screen.findByText("revoked")).toBeTruthy();
+  });
+
+  it("cria convite manual e copia a mensagem com o WhatsApp do Prestou", async () => {
+    const manualMessage =
+      "Olá! Você recebeu um convite para criar sua conta no Prestou. " +
+      "Para confirmar que este WhatsApp é seu e continuar o cadastro, " +
+      "toque no link e envie a mensagem pronta: https://wa.me/5541963491134?text=Oi";
+    let invites: Array<{ id: string; phone: string; status: string; expires_at: string }> = [];
+    mockApi.mockImplementation(<T,>(path: string, init?: RequestInit): Promise<T> => {
+      if (path === "/api/admin/providers") {
+        return Promise.resolve({ providers: [], nextCursor: null } as T);
+      }
+      if (path === "/api/admin/whatsapp-invites") {
+        if (init?.method === "POST") {
+          const body = JSON.parse(String(init.body ?? "{}"));
+          invites = [{
+            id: "22222222-2222-4222-8222-222222222222",
+            phone: body.phone,
+            status: "pending",
+            expires_at: "2026-08-04T12:00:00.000Z",
+          }];
+          return Promise.resolve({ invite: invites[0], manualMessage } as T);
+        }
+        return Promise.resolve({ invites } as T);
+      }
+      return Promise.reject(new Error(`Request inesperado: ${path}`));
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("switch", { name: "Envio manual" }));
+    expect(screen.getByText(/não será enviada automaticamente/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Número convidado"), {
+      target: { value: "41998826061" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Criar convite" }));
+
+    await waitFor(() => expect(mockApi).toHaveBeenCalledWith(
+      "/api/admin/whatsapp-invites",
+      {
+        method: "POST",
+        body: JSON.stringify({ phone: "41998826061", expiresInDays: 7, manual: true }),
+      },
+    ));
+    fireEvent.click(await screen.findByRole("button", { name: "Copiar mensagem de convite" }));
+    await waitFor(() => expect(writeClipboard).toHaveBeenCalledWith(manualMessage));
+    expect(screen.getByRole("button", { name: "Mensagem copiada!" })).toBeTruthy();
   });
 
   it("lista, busca e remove usuários somente após confirmação", async () => {

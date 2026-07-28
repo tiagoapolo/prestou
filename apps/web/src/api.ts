@@ -37,6 +37,9 @@ function responseError(response: Response, payload: ErrorPayload): ApiError {
   if (response.status === 503 && code === "ASSISTANT_UNAVAILABLE" && serverMessage) {
     return new ApiError(serverMessage, 503, code);
   }
+  if (response.status === 503 && code === "MANUAL_INVITE_UNAVAILABLE" && serverMessage) {
+    return new ApiError(serverMessage, 503, code);
+  }
   if (response.status >= 500) {
     return new ApiError(GENERIC_ERROR, response.status, code ?? "INTERNAL_ERROR");
   }

@@ -21,6 +21,7 @@ const emailSchema = z.string().trim().email().max(254);
 const createInviteSchema = z.object({
   phone: mobileSchema,
   expiresInDays: z.number().int().min(1).max(30).default(7),
+  manual: z.boolean().default(false),
 }).strict();
 const authorizeEmailSchema = z.object({
   email: emailSchema,
@@ -28,6 +29,17 @@ const authorizeEmailSchema = z.object({
 }).strict();
 
 const SIGNUP_CONFIRM_PAYLOAD = "signup:confirm";
+
+function manualInviteMessage(): string | undefined {
+  const prestouPhone = mobileSchema.safeParse(config.whatsapp.publicPhone);
+  if (!prestouPhone.success) return undefined;
+  const link = `https://wa.me/55${prestouPhone.data}?text=${encodeURIComponent("Oi")}`;
+  return (
+    "Olá! Você recebeu um convite para criar sua conta no Prestou. " +
+    "Para confirmar que este WhatsApp é seu e continuar o cadastro, " +
+    `toque no link e envie a mensagem pronta: ${link}`
+  );
+}
 
 const onboardingSecret =
   config.whatsapp.signup.onboardingSecret || config.supabase.serviceRoleKey;
@@ -653,6 +665,13 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
       if (!body.success) {
         return reply.code(400).send({ error: "Informe um celular válido para o convite." });
       }
+      const preparedManualMessage = body.data.manual ? manualInviteMessage() : undefined;
+      if (body.data.manual && !preparedManualMessage) {
+        return reply.code(503).send({
+          code: "MANUAL_INVITE_UNAVAILABLE",
+          error: "O telefone do Prestou não está configurado para convites manuais.",
+        });
+      }
       const owner = await queryOne<{ id: string }>(
         "SELECT id FROM providers WHERE whatsapp = ?",
         body.data.phone,
@@ -682,25 +701,27 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
             id,
           ))!;
         });
-        try {
-          await sendWhatsAppTemplate({
-            to: `55${invite.phone}`,
-            name: config.whatsapp.signup.template,
-            quickReplyButtonPayload: SIGNUP_CONFIRM_PAYLOAD,
-          });
-        } catch (error) {
-          await execute(
-            `UPDATE private.whatsapp_signup_invites
-                SET status = 'revoked', revoked_at = now()
-              WHERE id = ? AND status = 'pending'`,
-            invite.id,
-          );
-          req.log.error({ err: error, inviteId: invite.id }, "signup invite delivery failed");
-          return reply.code(502).send({
-            error: "Não foi possível enviar o convite pelo WhatsApp. Tente novamente.",
-          });
+        if (!body.data.manual) {
+          try {
+            await sendWhatsAppTemplate({
+              to: `55${invite.phone}`,
+              name: config.whatsapp.signup.template,
+              quickReplyButtonPayload: SIGNUP_CONFIRM_PAYLOAD,
+            });
+          } catch (error) {
+            await execute(
+              `UPDATE private.whatsapp_signup_invites
+                  SET status = 'revoked', revoked_at = now()
+                WHERE id = ? AND status = 'pending'`,
+              invite.id,
+            );
+            req.log.error({ err: error, inviteId: invite.id }, "signup invite delivery failed");
+            return reply.code(502).send({
+              error: "Não foi possível enviar o convite pelo WhatsApp. Tente novamente.",
+            });
+          }
         }
-        return reply.code(201).send({ invite });
+        return reply.code(201).send({ invite, manualMessage: preparedManualMessage });
       } catch (error) {
         if ((error as { code?: string }).code === "23505") {
           return reply.code(409).send({ error: "Já existe um convite ativo para este número." });

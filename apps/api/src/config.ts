@@ -51,6 +51,7 @@ export const config = {
   whatsapp: {
     mode: enumEnv("WHATSAPP_MODE", ["log", "cloud-api"] as const, "log"),
     phoneNumberId: env("WHATSAPP_PHONE_NUMBER_ID"),
+    publicPhone: env("WHATSAPP_PUBLIC_PHONE", "5541963491134"),
     accessToken: env("WHATSAPP_ACCESS_TOKEN"),
     templateLang: env("WHATSAPP_TEMPLATE_LANG", "pt_BR"),
     // Webhook inbound: verify token (handshake GET) e app secret (assinatura
