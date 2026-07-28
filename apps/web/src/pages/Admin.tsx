@@ -34,6 +34,15 @@ interface ProvidersPage {
   nextCursor: string | null;
 }
 
+interface AdminInboundMessage {
+  id: string;
+  senderPhone: string;
+  kind: "text" | "button";
+  content: string;
+  receivedAt: string;
+  provider: { id: string; name: string } | null;
+}
+
 export function AdminPage() {
   const { provider } = useAuth();
   const [invitePhone, setInvitePhone] = useState("");
@@ -47,6 +56,9 @@ export function AdminPage() {
   const [providers, setProviders] = useState<AdminProvider[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providersError, setProvidersError] = useState("");
+  const [messages, setMessages] = useState<AdminInboundMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
+  const [messagesError, setMessagesError] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -59,7 +71,21 @@ export function AdminPage() {
     if (!provider?.admin) return;
     loadInvites();
     loadProviders();
+    loadMessages();
   }, [provider?.admin]);
+
+  async function loadMessages() {
+    setMessagesLoading(true);
+    setMessagesError("");
+    try {
+      const result = await api<{ messages: AdminInboundMessage[] }>("/api/admin/inbound-messages");
+      setMessages(result.messages);
+    } catch (cause) {
+      setMessagesError(userMessage(cause, "Não foi possível carregar as mensagens."));
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
 
   async function loadProviders(query = "", cursor?: string) {
     setProvidersLoading(true);
@@ -181,7 +207,44 @@ export function AdminPage() {
   return (
     <div className="page admin-page">
       <div className="back-title"><Link to="/" aria-label="Voltar">‹</Link><div><p className="eyebrow">Acesso restrito</p><h1>Administração</h1></div></div>
-      <p className="settings-help">Consulte usuários registrados e gerencie os convites de entrada no piloto.</p>
+      <p className="settings-help">Acompanhe as mensagens recebidas, consulte usuários e gerencie os convites de entrada no piloto.</p>
+
+      <Card className="admin-users-card">
+        <div className="admin-card-heading">
+          <div><p className="eyebrow">Todos os chats</p><h2>Últimas mensagens recebidas</h2></div>
+          {!messagesLoading && <small>{messages.length} mensagem{messages.length === 1 ? "" : "s"}</small>}
+        </div>
+        {messagesError && <ErrorNotice message={messagesError} />}
+        {messagesLoading && <Spinner label="Carregando mensagens…" />}
+        {!messagesLoading && !messagesError && messages.length === 0 && (
+          <p className="admin-empty">Nenhuma mensagem recebida ainda.</p>
+        )}
+        {messages.length > 0 && (
+          <div className="admin-table-wrap">
+            <table className="admin-table admin-messages-table" aria-label="Últimas mensagens recebidas">
+              <thead><tr><th>Chat</th><th>Mensagem</th><th>Tipo</th><th>Recebida em</th></tr></thead>
+              <tbody>
+                {messages.map((message) => (
+                  <tr key={message.id}>
+                    <td data-label="Chat">
+                      <strong>{message.provider?.name ?? "Número não cadastrado"}</strong>
+                      <small>{formatMobile(message.senderPhone)}</small>
+                    </td>
+                    <td data-label="Mensagem" className="admin-message-content">{message.content}</td>
+                    <td data-label="Tipo">{message.kind === "text" ? "Texto" : "Botão"}</td>
+                    <td data-label="Recebida em">
+                      {new Date(message.receivedAt).toLocaleString("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Card className="admin-users-card">
         <div className="admin-card-heading">

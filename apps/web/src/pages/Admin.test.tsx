@@ -39,6 +39,9 @@ describe("página de administração", () => {
       if (path === "/api/admin/providers") {
         return Promise.resolve({ providers: [], nextCursor: null } as T);
       }
+      if (path === "/api/admin/inbound-messages") {
+        return Promise.resolve({ messages: [] } as T);
+      }
       if (path === "/api/admin/whatsapp-invites") {
         return Promise.resolve({ invites: [] } as T);
       }
@@ -60,6 +63,9 @@ describe("página de administração", () => {
     mockApi.mockImplementation(<T,>(path: string, init?: RequestInit): Promise<T> => {
       if (path === "/api/admin/providers") {
         return Promise.resolve({ providers: [], nextCursor: null } as T);
+      }
+      if (path === "/api/admin/inbound-messages") {
+        return Promise.resolve({ messages: [] } as T);
       }
       if (path === "/api/admin/whatsapp-invites") {
         if (init?.method === "POST") {
@@ -116,6 +122,9 @@ describe("página de administração", () => {
       if (path === "/api/admin/providers") {
         return Promise.resolve({ providers: [], nextCursor: null } as T);
       }
+      if (path === "/api/admin/inbound-messages") {
+        return Promise.resolve({ messages: [] } as T);
+      }
       if (path === "/api/admin/whatsapp-invites") {
         if (init?.method === "POST") {
           const body = JSON.parse(String(init.body ?? "{}"));
@@ -156,6 +165,9 @@ describe("página de administração", () => {
     mockApi.mockImplementation(<T,>(path: string, init?: RequestInit): Promise<T> => {
       if (path === "/api/admin/whatsapp-invites") {
         return Promise.resolve({ invites: [] } as T);
+      }
+      if (path === "/api/admin/inbound-messages") {
+        return Promise.resolve({ messages: [] } as T);
       }
       if (path === "/api/admin/providers/11111111-1111-4111-8111-111111111111" && init?.method === "DELETE") {
         return Promise.resolve({ deleted: true } as T);
@@ -204,5 +216,41 @@ describe("página de administração", () => {
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     await waitFor(() => expect(mockApi).toHaveBeenCalledWith("/api/admin/providers?q=maria"));
     expect(await screen.findByText("Nenhum usuário encontrado.")).toBeTruthy();
+  });
+
+  it("mostra as mensagens mais recentes de todos os chats", async () => {
+    mockApi.mockImplementation(<T,>(path: string): Promise<T> => {
+      if (path === "/api/admin/providers") {
+        return Promise.resolve({ providers: [], nextCursor: null } as T);
+      }
+      if (path === "/api/admin/whatsapp-invites") {
+        return Promise.resolve({ invites: [] } as T);
+      }
+      if (path === "/api/admin/inbound-messages") {
+        return Promise.resolve({ messages: [{
+          id: "wamid.1",
+          senderPhone: "5511976543210",
+          kind: "text",
+          content: "Quem está em atraso?",
+          receivedAt: "2026-07-28T12:30:00.000Z",
+          provider: { id: "11111111-1111-4111-8111-111111111111", name: "João Jardineiro" },
+        }, {
+          id: "wamid.2",
+          senderPhone: "5511987654321",
+          kind: "button",
+          content: "charge:create:123",
+          receivedAt: "2026-07-28T12:00:00.000Z",
+          provider: null,
+        }] } as T);
+      }
+      return Promise.reject(new Error(`Request inesperado: ${path}`));
+    });
+    renderPage();
+
+    expect(await screen.findByRole("table", { name: "Últimas mensagens recebidas" })).toBeTruthy();
+    expect(screen.getByText("Quem está em atraso?")).toBeTruthy();
+    expect(screen.getByText("João Jardineiro")).toBeTruthy();
+    expect(screen.getByText("Número não cadastrado")).toBeTruthy();
+    expect(screen.getByText("Botão")).toBeTruthy();
   });
 });

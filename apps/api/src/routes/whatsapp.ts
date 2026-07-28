@@ -451,6 +451,29 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
       // Número conhecido segue para o assistente. Um número desconhecido nunca
       // chega à LLM: se estiver convidado, recebe somente o link determinístico.
       const provider = providers.length === 1 ? providers[0] : undefined;
+      await withTransaction(async (tx) => {
+        await tx.execute(
+          `INSERT INTO private.whatsapp_inbound_messages
+             (message_id, provider_id, sender_phone, kind, content, received_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (message_id) DO NOTHING`,
+          inbound.id,
+          provider?.id ?? null,
+          inbound.from.replace(/\D/g, ""),
+          inbound.kind,
+          inbound.kind === "text" ? inbound.text : inbound.buttonId,
+          inbound.receivedAt ? new Date(inbound.receivedAt) : new Date(),
+        );
+        await tx.execute(
+          `DELETE FROM private.whatsapp_inbound_messages
+            WHERE message_id IN (
+              SELECT message_id
+                FROM private.whatsapp_inbound_messages
+               ORDER BY received_at DESC, message_id DESC
+               OFFSET 100
+            )`,
+        );
+      });
       if (!provider) {
         try {
           const signupToken = await startInvitedWhatsAppOnboarding(inbound);

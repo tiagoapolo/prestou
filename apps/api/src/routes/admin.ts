@@ -34,6 +34,16 @@ interface ProviderDeletionRow {
   whatsapp: string;
 }
 
+interface AdminInboundMessageRow {
+  message_id: string;
+  sender_phone: string;
+  kind: "text" | "button";
+  content: string;
+  received_at: string;
+  provider_id: string | null;
+  provider_name: string | null;
+}
+
 const cursorSchema = z.object({
   createdAt: z.string().datetime(),
   id: z.string().uuid(),
@@ -52,6 +62,39 @@ function encodeCursor(row: AdminProviderRow): string {
 }
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
+  app.get(
+    "/api/admin/inbound-messages",
+    { preHandler: requireAppAdmin },
+    async () => {
+      const messages = await queryAll<AdminInboundMessageRow>(
+        `SELECT messages.message_id,
+                messages.sender_phone,
+                messages.kind,
+                messages.content,
+                messages.received_at,
+                providers.id AS provider_id,
+                providers.name AS provider_name
+           FROM private.whatsapp_inbound_messages AS messages
+           LEFT JOIN providers ON providers.id = messages.provider_id
+          ORDER BY messages.received_at DESC, messages.message_id DESC
+          LIMIT 100`,
+      );
+
+      return {
+        messages: messages.map((message) => ({
+          id: message.message_id,
+          senderPhone: message.sender_phone,
+          kind: message.kind,
+          content: message.content,
+          receivedAt: message.received_at,
+          provider: message.provider_id && message.provider_name
+            ? { id: message.provider_id, name: message.provider_name }
+            : null,
+        })),
+      };
+    },
+  );
+
   app.get<{ Querystring: { q?: string; cursor?: string } }>(
     "/api/admin/providers",
     { preHandler: requireAppAdmin },
