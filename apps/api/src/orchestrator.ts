@@ -172,6 +172,14 @@ const CAPABILITIES =
   "Posso preparar uma cobrança, listar quem está em atraso, mostrar a situação " +
   "de um cliente e resumir o mês.";
 
+const GREETING_OPTIONS = [
+  "Olá! Posso ajudar você a:",
+  "• Preparar uma cobrança",
+  "• Listar quem está em atraso",
+  "• Mostrar a situação de um cliente",
+  "• Resumir o mês",
+].join("\n");
+
 function instructions(today: string, memoryMode?: ChargeMemoryMode): string {
   return [
     "Você é o assistente do prestador no Prestou. Escolha exatamente uma ferramenta.",
@@ -195,6 +203,15 @@ function looksLikeStandaloneWhatsapp(message: string): boolean {
 
 function normalizedReply(value: string): string {
   return normalizedName(value).replace(/[.!?]+$/g, "");
+}
+
+function isGreeting(value: string): boolean {
+  const normalized = normalizedName(value)
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const greeting = "(?:oi+|oie+|ola|opa|bom dia|boa tarde|boa noite|e ai|eae|salve|alo|hey|hello|tudo bem|como vai)";
+  return new RegExp(`^${greeting}(?: ${greeting})*$`).test(normalized);
 }
 
 function isAffirmativeReply(value: string): boolean {
@@ -438,6 +455,11 @@ export async function interpretMessage(input: InterpretMessageInput): Promise<As
 
   const pendingEntry = input.memory ? await input.memory.load(input.providerId) : null;
   const defaultDueDate = addDaysISO(today, input.defaultDueDays ?? 0);
+
+  if (isGreeting(input.message)) {
+    if (input.memory) await input.memory.clear(input.providerId);
+    return { kind: "text", message: GREETING_OPTIONS };
+  }
 
   if (pendingEntry?.phoneConfirmation && input.memory) {
     if (isNegativeReply(input.message)) {

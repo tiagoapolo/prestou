@@ -188,6 +188,47 @@ test("pedido_nao_suportado devolve o escopo", async () => {
   assert.equal(result.kind === "text" ? result.classification : undefined, "unsupported");
 });
 
+test("saudações mostram as opções sem consultar a IA", async () => {
+  for (const message of ["oi", "Oiê!", "Olá!", "bom dia", "Boa tarde 👋", "e aí, tudo bem?"]) {
+    const result = await interpretMessage({
+      providerId: "provider-1",
+      message,
+      deps: deps(),
+      apiKey: "test-key",
+      model: "gpt-5.4-nano",
+      llm: { interpret: async () => {
+        throw new Error("saudação não deve chegar ao classificador");
+      } },
+    });
+
+    assert.equal(result.kind, "text");
+    assert.match(result.message, /Preparar uma cobrança/);
+    assert.match(result.message, /Listar quem está em atraso/);
+    assert.match(result.message, /situação de um cliente/);
+    assert.match(result.message, /Resumir o mês/);
+  }
+});
+
+test("saudação acompanhada de pedido continua sendo interpretada", async () => {
+  let llmCalled = false;
+  const result = await interpretMessage({
+    providerId: "provider-1",
+    message: "oi, quem me deve?",
+    deps: deps({
+      listOverdue: async () => [{ clientName: "João", amountCents: 8000, dueDate: "2026-07-20" }],
+    }),
+    apiKey: "test-key",
+    model: "gpt-5.4-nano",
+    llm: { interpret: async () => {
+      llmCalled = true;
+      return { name: "listar_inadimplentes", arguments: {} };
+    } },
+  });
+
+  assert.equal(llmCalled, true);
+  assert.match(result.message, /João/);
+});
+
 test("cobrança retoma o rascunho pendente na mensagem seguinte", async () => {
   const memory = memoryStore();
   const base = {
