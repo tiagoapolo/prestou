@@ -537,6 +537,54 @@ test("número desconhecido sem convite não recebe resposta nem cria onboarding"
   assert.equal(persisted, undefined);
 });
 
+test("pedidos não suportados não ativam o cooldown do WhatsApp", async () => {
+  const { id: providerId } = await createProvider("unsupported", "11930000014");
+
+  for (let index = 0; index < 3; index += 1) {
+    const messageId = `wamid.${crypto.randomUUID()}`;
+    const admission = await queryOne<{ decision: string; allowed: boolean }>(
+      `SELECT * FROM private.admit_whatsapp_message(
+        ?::uuid, ?, ?, 'text', 2, 1000, 10, 100, 5000, 30, 30, 3
+      )`,
+      providerId,
+      messageId,
+      `unsupported-${index}`,
+    );
+    assert.equal(admission?.decision, "allowed");
+    assert.equal(admission?.allowed, true);
+    await execute(
+      "SELECT private.finish_whatsapp_message(?::uuid, ?, true, 3, 30)",
+      providerId,
+      messageId,
+    );
+  }
+
+  const state = await queryOne<{ invalid_streak: number; blocked_until: string | null }>(
+    `SELECT invalid_streak, blocked_until
+       FROM private.whatsapp_guardrail_state
+      WHERE provider_id = ?`,
+    providerId,
+  );
+  assert.equal(state?.invalid_streak, 0);
+  assert.equal(state?.blocked_until, null);
+
+  const nextMessageId = `wamid.${crypto.randomUUID()}`;
+  const next = await queryOne<{ decision: string; allowed: boolean }>(
+    `SELECT * FROM private.admit_whatsapp_message(
+      ?::uuid, ?, 'supported-after-unsupported', 'text', 22, 1000, 10, 100, 5000, 30, 30, 3
+    )`,
+    providerId,
+    nextMessageId,
+  );
+  assert.equal(next?.decision, "allowed");
+  assert.equal(next?.allowed, true);
+  await execute(
+    "SELECT private.release_whatsapp_message(?::uuid, ?)",
+    providerId,
+    nextMessageId,
+  );
+});
+
 test("número convidado recebe link pelo webhook assinado sem passar pela LLM", async () => {
   const created = await admin.auth.admin.createUser({
     email: `prestou-invite-${crypto.randomUUID()}@example.com`,

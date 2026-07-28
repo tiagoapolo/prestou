@@ -57,13 +57,13 @@ export async function admitWhatsAppMessage(
 export async function finishWhatsAppMessage(
   providerId: string,
   messageId: string,
-  invalid: boolean,
+  unsupported: boolean,
 ): Promise<void> {
   await execute(
     "SELECT private.finish_whatsapp_message(?::uuid, ?, ?, ?, ?)",
     providerId,
     messageId,
-    invalid,
+    unsupported,
     config.whatsapp.guardrail.invalidStreakLimit,
     config.whatsapp.guardrail.cooldownMinutes,
   );
