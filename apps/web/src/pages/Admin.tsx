@@ -43,6 +43,8 @@ interface AdminInboundMessage {
   provider: { id: string; name: string } | null;
 }
 
+interface SignupFunnel { events: Array<{ type: string; total: number }>; }
+
 export function AdminPage() {
   const { provider } = useAuth();
   const [invitePhone, setInvitePhone] = useState("");
@@ -65,6 +67,7 @@ export function AdminPage() {
   const [providerToDelete, setProviderToDelete] = useState<AdminProvider | null>(null);
   const [deletingProvider, setDeletingProvider] = useState(false);
   const [deletionError, setDeletionError] = useState("");
+  const [signupFunnel, setSignupFunnel] = useState<SignupFunnel | null>(null);
   const deletionDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -72,6 +75,7 @@ export function AdminPage() {
     loadInvites();
     loadProviders();
     loadMessages();
+    api<SignupFunnel>("/api/admin/insights/signup").then(setSignupFunnel).catch(() => setSignupFunnel(null));
   }, [provider?.admin]);
 
   async function loadMessages() {
@@ -208,6 +212,13 @@ export function AdminPage() {
     <div className="page admin-page">
       <div className="back-title"><Link to="/" aria-label="Voltar">‹</Link><div><p className="eyebrow">Acesso restrito</p><h1>Administração</h1></div></div>
       <p className="settings-help">Acompanhe as mensagens recebidas, consulte usuários e gerencie os convites de entrada no piloto.</p>
+
+      <Card className="admin-users-card">
+        <div className="admin-card-heading"><div><p className="eyebrow">Aquisição</p><h2>Funil de cadastro</h2></div></div>
+        {!signupFunnel ? <Spinner label="Carregando funil…" /> : signupFunnel.events.length === 0 ? <p className="admin-empty">Nenhuma etapa de cadastro registrada ainda.</p> : (
+          <div className="admin-table-wrap"><table className="admin-table" aria-label="Funil de cadastro"><thead><tr><th>Etapa</th><th>Total</th></tr></thead><tbody>{signupFunnel.events.map((event) => <tr key={event.type}><td data-label="Etapa">{event.type.replace(/^cadastro_/, "").replaceAll("_", " ")}</td><td data-label="Total">{event.total}</td></tr>)}</tbody></table></div>
+        )}
+      </Card>
 
       <Card className="admin-users-card">
         <div className="admin-card-heading">
