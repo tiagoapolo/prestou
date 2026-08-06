@@ -15,7 +15,7 @@ Fonte: `tasks/plan.md`. A implementação segue a ordem de dependências abaixo.
   - Verify: migração em Supabase de teste, teste de onboarding e advisors.
   - Files: nova migração, fixture e teste de onboarding.
 
-- [ ] Task 3: Criar o contrato assinado de intenção e os primitivos de analytics
+- [x] Task 3: Criar o contrato assinado de intenção e os primitivos de analytics
   - Acceptance: atribuição validada e assinada; envelope inválido não autoriza;
     eventos aceitam `journeyId` idempotente.
   - Verify: teste unitário focado e typecheck da API.

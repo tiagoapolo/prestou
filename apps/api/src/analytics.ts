@@ -3,6 +3,12 @@ import { newId } from "./ids.js";
 
 /** Eventos do funil (seção 9 do plano). Sem isso o piloto não gera aprendizado. */
 export type EventType =
+  | "cadastro_entrada_aberta"
+  | "cadastro_whatsapp_iniciado"
+  | "cadastro_link_emitido"
+  | "cadastro_link_aberto"
+  | "cadastro_email_autorizado"
+  | "cadastro_conta_criada"
   | "cobranca_criada"
   | "mensagem_enviada"
   | "link_aberto"
@@ -19,19 +25,23 @@ export interface TrackInput {
   providerId?: string | null;
   chargeId?: string | null;
   paymentId?: string | null;
+  onboardingJourneyId?: string | null;
   metadata?: Record<string, unknown>;
 }
 
 export async function track(input: TrackInput, client: DatabaseClient = db): Promise<void> {
   await client.execute(`
-    INSERT INTO events (id, type, provider_id, charge_id, payment_id, metadata, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO events
+      (id, type, provider_id, charge_id, payment_id, onboarding_journey_id, metadata, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT DO NOTHING
   `,
     newId(),
     input.type,
     input.providerId ?? null,
     input.chargeId ?? null,
     input.paymentId ?? null,
+    input.onboardingJourneyId ?? null,
     input.metadata ? JSON.stringify(input.metadata) : null,
     new Date().toISOString(),
   );
