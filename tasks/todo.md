@@ -21,7 +21,7 @@ Fonte: `tasks/plan.md`. A implementação segue a ordem de dependências abaixo.
   - Verify: teste unitário focado e typecheck da API.
   - Files: `public-signup.ts`, `analytics.ts`, teste unitário.
 
-- [ ] Task 4: Entregar a rota pública e o CTA até o WhatsApp
+- [x] Task 4: Entregar a rota pública e o CTA até o WhatsApp
   - Acceptance: `/comecar` abre apenas `wa.me` oficial; modo indisponível é
     seguro; entrada é rastreada uma vez.
   - Verify: testes de API e Vitest da página.

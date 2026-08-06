@@ -11,6 +11,7 @@ import { SettingsPage } from "./pages/Settings";
 import { PrivacyPage } from "./pages/Privacy";
 import { FinancialPage } from "./pages/Financial";
 import { AdminPage } from "./pages/Admin";
+import { StartPage } from "./pages/Start";
 
 function PrivateApp() {
   const auth = useAuth();
@@ -37,6 +38,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/privacidade" element={<PrivacyPage />} />
+      <Route path="/comecar" element={<StartPage />} />
       <Route path="/pay/:token" element={<PublicPaymentPage />} />
       <Route path="/*" element={<PrivateApp />} />
     </Routes>

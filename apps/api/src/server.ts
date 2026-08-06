@@ -6,6 +6,7 @@ import { providerRoutes } from "./routes/providers.js";
 import { chargeRoutes } from "./routes/charges.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { publicRoutes } from "./routes/public.js";
+import { publicSignupRoutes } from "./routes/public-signup.js";
 import { insightRoutes } from "./routes/insights.js";
 import { actionProposalRoutes } from "./routes/action-proposals.js";
 import { assistantRoutes } from "./routes/assistant.js";
@@ -83,6 +84,7 @@ export async function buildServer() {
   await app.register(financialRoutes);
   await app.register(adminRoutes);
   await app.register(publicRoutes);
+  await app.register(publicSignupRoutes);
   await app.register(insightRoutes);
   await app.register(actionProposalRoutes);
   await app.register(assistantRoutes);
