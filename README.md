@@ -135,10 +135,11 @@ Configure no Supabase Auth:
 - redirect URL do frontend e `/cadastro` (retorno do convite por magic link);
 - magic link por e-mail;
 - criação pública de usuários desabilitada; o onboarding cria a identidade
-  server-side depois de convite + CAPTCHA;
+  server-side depois de confirmação do WhatsApp + CAPTCHA;
 - SMTP próprio antes de ampliar o piloto, se necessário.
 
-No piloto por convite, configure também o Turnstile, o template de convite
+No onboarding por WhatsApp, configure também o Turnstile. Em `invite_only`,
+configure o template de convite
 `convite_prestador`, o template de autenticação `WHATSAPP_AUTH_TEMPLATE` para
 troca posterior de número e um cron autenticado para
 `POST /api/internal/run-whatsapp-onboarding-retention`.
