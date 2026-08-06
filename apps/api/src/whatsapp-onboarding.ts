@@ -15,6 +15,7 @@ import { newId } from "./ids.js";
 import { sendWhatsAppTemplate } from "./notify.js";
 import { nationalWhatsAppIdentityCandidates, type InboundMessage } from "./channels/whatsapp.js";
 import { mobileSchema, requiredText } from "./validation.js";
+import { parsePublicSignupIntent } from "./public-signup.js";
 
 const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const emailSchema = z.string().trim().email().max(254);
@@ -60,7 +61,7 @@ interface InviteRow {
 
 interface SessionRow {
   id: string;
-  invite_id: string;
+  invite_id: string | null;
   phone: string;
   phone_verified_at: string;
   auth_user_id: string | null;
@@ -260,6 +261,62 @@ export async function startInvitedWhatsAppOnboarding(
       session.id,
       tokenDigest(rawToken),
       config.whatsapp.signup.linkTtlMinutes,
+    );
+    return rawToken;
+  });
+}
+
+/**
+ * Entrada self-serve: somente a frase assinada/exata cria estado. Mensagens
+ * desconhecidas continuam fora da LLM e não ganham resposta.
+ */
+export async function startPublicWhatsAppOnboarding(
+  inbound: InboundMessage,
+): Promise<string | undefined> {
+  if (config.whatsapp.signup.mode !== "public" || inbound.kind !== "text") return undefined;
+  const intent = parsePublicSignupIntent(inbound.text, { secret: onboardingSecret });
+  if (!intent) return undefined;
+  const [phone] = nationalWhatsAppIdentityCandidates(inbound.from);
+
+  return withTransaction(async (tx) => {
+    await tx.execute("SELECT pg_advisory_xact_lock(hashtext(?))", phone);
+    const admitted = await tx.execute(
+      `INSERT INTO private.whatsapp_onboarding_messages (message_id, phone)
+       VALUES (?, ?) ON CONFLICT (message_id) DO NOTHING`,
+      inbound.id,
+      phone,
+    );
+    if (admitted.changes === 0) return undefined;
+
+    const phoneCount = await incrementOnboardingCounter(tx, "phone_day", phone);
+    if (phoneCount > config.whatsapp.signup.phoneDailyLimit) return undefined;
+    const globalCount = await incrementOnboardingCounter(tx, "global_day", "all");
+    if (globalCount > config.whatsapp.signup.globalDailyLimit) return undefined;
+
+    const existing = await tx.queryOne<SessionRow>(
+      `SELECT * FROM private.whatsapp_onboarding_sessions
+        WHERE phone = ? AND entry_mode = 'public' AND consumed_at IS NULL AND expires_at > now()
+        FOR UPDATE`,
+      phone,
+    );
+    if (existing) return undefined;
+
+    const sessionId = newId();
+    await tx.execute(
+      `INSERT INTO private.whatsapp_onboarding_sessions
+         (id, entry_mode, onboarding_journey_id, attribution, phone, phone_verified_at, expires_at)
+       VALUES (?, 'public', ?, ?::text::jsonb, ?, now(), now() + (? * interval '1 minute'))`,
+      sessionId,
+      "journeyId" in intent ? intent.journeyId : newId(),
+      JSON.stringify(intent.attribution),
+      phone,
+      config.whatsapp.signup.sessionTtlMinutes,
+    );
+    const rawToken = newOnboardingToken();
+    await tx.execute(
+      `INSERT INTO private.whatsapp_onboarding_tokens (id, session_id, token_digest, expires_at)
+       VALUES (?, ?, ?, now() + (? * interval '1 minute'))`,
+      newId(), sessionId, tokenDigest(rawToken), config.whatsapp.signup.linkTtlMinutes,
     );
     return rawToken;
   });

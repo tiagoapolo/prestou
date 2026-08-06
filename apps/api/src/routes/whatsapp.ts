@@ -36,6 +36,7 @@ import {
 import {
   invalidateOnboardingToken,
   invitedSignupMessage,
+  startPublicWhatsAppOnboarding,
   startInvitedWhatsAppOnboarding,
 } from "../whatsapp-onboarding.js";
 
@@ -476,7 +477,8 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
       });
       if (!provider) {
         try {
-          const signupToken = await startInvitedWhatsAppOnboarding(inbound);
+          const signupToken = await startInvitedWhatsAppOnboarding(inbound)
+            ?? await startPublicWhatsAppOnboarding(inbound);
           if (signupToken) {
             try {
               await deliverReply(
