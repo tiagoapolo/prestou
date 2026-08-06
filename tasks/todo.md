@@ -57,8 +57,9 @@ Fonte: `tasks/plan.md`. A implementação segue a ordem de dependências abaixo.
   - Verify: testes de consulta/autorização, Vitest e `EXPLAIN` em teste.
   - Files: query de analytics, rota, teste e painel admin.
 
-- [ ] Task 10: Fechar segurança, operação e documentação
-  - Acceptance: runbook, smoke de staging, rollback e revisão Supabase/Meta
-    documentados; produção não é habilitada.
+- [ ] Task 10: Fechar segurança e documentação local
+  - Acceptance: revisão de segredos e verificações automatizadas concluídas;
+    produção não é habilitada. Runbook, smoke de staging e rollback ficam fora
+    do escopo desta iteração.
   - Verify: suites completas, typecheck, build, diff e revisão de secrets.
-  - Files: exemplos de env, README, operação e specs de fluxo.
+  - Files: exemplos de env, README e specs de fluxo.

@@ -543,18 +543,17 @@ abandono e mostrar um resumo no admin sem expor candidatos individuais.
 
 ### Phase 5: Hardening and rollout readiness
 
-## Task 10: Fechar segurança, operação e documentação
+## Task 10: Fechar segurança e documentação local
 
-**Description:** Executar a revisão STRIDE, validar Supabase/Meta em staging,
-documentar configuração e rollback e preparar a checklist operacional sem
-habilitar produção.
+**Description:** Executar a revisão STRIDE e documentar a configuração local,
+sem habilitar produção. Runbook, validação em staging e rollback foram
+removidos explicitamente do escopo nesta iteração.
 
 **Acceptance criteria:**
 
-- [ ] Runbook documenta modos, teto público de 20 sessões/dia, métricas,
-  troubleshooting, retorno a `invite_only` e retenção.
-- [ ] Smoke test real comprova número novo, número ativo, replay, limite e
-  indisponibilidade externa; logs não contêm tokens ou PII sensível.
+- [ ] Configuração local e limites estão documentados sem segredos.
+- [ ] Verificações automatizadas cobrem o fluxo disponível localmente; staging
+  e rollback não fazem parte desta entrega.
 - [ ] Changelog/docs atuais do Supabase são revisados, advisors não têm achado
   crítico relevante e auditoria de dependências é triada.
 
@@ -562,7 +561,7 @@ habilitar produção.
 
 - [ ] `pnpm --filter @prestou/api test`
 - [ ] `pnpm --filter @prestou/web test && pnpm typecheck && pnpm build`
-- [ ] `git diff --check`, revisão de secrets e checklist manual de staging.
+- [ ] `git diff --check` e revisão de secrets.
 
 **Dependencies:** Tasks 1–9
 
