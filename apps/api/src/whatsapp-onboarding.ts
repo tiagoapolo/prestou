@@ -70,6 +70,7 @@ interface SessionRow {
   email_requested_at: string | null;
   expires_at: string;
   consumed_at: string | null;
+  onboarding_journey_id: string;
 }
 
 interface ActiveOnboardingRow {
@@ -84,6 +85,7 @@ interface ActiveOnboardingRow {
   session_auth_user_id: string | null;
   session_requested_email: string | null;
   session_email_requested_at: string | null;
+  session_onboarding_journey_id: string;
   session_expires_at: string;
   session_consumed_at: string | null;
   invite_id: string;
@@ -343,6 +345,7 @@ async function loadActiveOnboarding(token: string): Promise<{
        ses.auth_user_id AS session_auth_user_id,
        ses.requested_email AS session_requested_email,
        ses.email_requested_at AS session_email_requested_at,
+       ses.onboarding_journey_id AS session_onboarding_journey_id,
        ses.expires_at AS session_expires_at,
        ses.consumed_at AS session_consumed_at,
        inv.id AS invite_id, inv.phone AS invite_phone,
@@ -375,6 +378,7 @@ async function loadActiveOnboarding(token: string): Promise<{
     email_requested_at: row.session_email_requested_at,
     expires_at: row.session_expires_at,
     consumed_at: row.session_consumed_at,
+    onboarding_journey_id: row.session_onboarding_journey_id,
   };
   const inviteRow: InviteRow = {
     id: row.invite_id ?? "public",
@@ -577,6 +581,7 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
       if (!active || !config.whatsapp.signup.enabled) {
         return reply.code(404).send({ error: "Convite inválido ou expirado." });
       }
+      await track({ type: "cadastro_link_aberto", onboardingJourneyId: active.session.onboarding_journey_id });
       return { phoneMasked: maskedPhone(active.session.phone) };
     },
   );
@@ -706,6 +711,7 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
         }
         throw error;
       }
+      await track({ type: "cadastro_email_autorizado", onboardingJourneyId: active.session.onboarding_journey_id });
       return { authorized: true };
     },
   );
