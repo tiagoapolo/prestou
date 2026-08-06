@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   PUBLIC_SIGNUP_MESSAGE,
+  EXISTING_PROVIDER_SIGNUP_REPLY,
   createPublicSignupMessage,
   parsePublicSignupIntent,
   signupAttributionSchema,
@@ -60,4 +61,9 @@ test("token adulterado ou expirado degrada para atribuição direta sem autoriza
     attribution: { source: "direct", medium: "unknown" },
   });
   assert.equal(parsePublicSignupIntent("Oi", { secret, now }), undefined);
+});
+
+test("número com conta recebe orientação determinística ao reenviar a frase de cadastro", () => {
+  assert.match(EXISTING_PROVIDER_SIGNUP_REPLY, /já tem uma conta/);
+  assert.doesNotMatch(EXISTING_PROVIDER_SIGNUP_REPLY, /token|cadastro\?/i);
 });

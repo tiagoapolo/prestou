@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 export const PUBLIC_SIGNUP_MESSAGE = "Quero começar no Prestou";
+export const EXISTING_PROVIDER_SIGNUP_REPLY =
+  "Você já tem uma conta no Prestou. Acesse seu painel para continuar organizando suas cobranças.";
 const PUBLIC_SIGNUP_TOKEN_TTL_MS = 24 * 60 * 60 * 1_000;
 
 const attributionValueSchema = (maxLength: number) => z.string()

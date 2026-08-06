@@ -39,6 +39,10 @@ import {
   startPublicWhatsAppOnboarding,
   startInvitedWhatsAppOnboarding,
 } from "../whatsapp-onboarding.js";
+import {
+  EXISTING_PROVIDER_SIGNUP_REPLY,
+  parsePublicSignupIntent,
+} from "../public-signup.js";
 
 const CHARGE_PROPOSAL_TTL_MINUTES = 10;
 
@@ -452,6 +456,11 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
       // Número conhecido segue para o assistente. Um número desconhecido nunca
       // chega à LLM: se estiver convidado, recebe somente o link determinístico.
       const provider = providers.length === 1 ? providers[0] : undefined;
+      const publicSignupIntent = inbound.kind === "text"
+        ? parsePublicSignupIntent(inbound.text, {
+          secret: config.whatsapp.signup.onboardingSecret || config.supabase.serviceRoleKey,
+        })
+        : undefined;
       await withTransaction(async (tx) => {
         await tx.execute(
           `INSERT INTO private.whatsapp_inbound_messages
@@ -462,7 +471,9 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
           provider?.id ?? null,
           inbound.from.replace(/\D/g, ""),
           inbound.kind,
-          inbound.kind === "text" ? inbound.text : inbound.buttonId,
+          inbound.kind === "text"
+            ? (publicSignupIntent ? "[onboarding signup intent redacted]" : inbound.text)
+            : inbound.buttonId,
           inbound.receivedAt ? new Date(inbound.receivedAt) : new Date(),
         );
         await tx.execute(
@@ -502,6 +513,10 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
       if (provider) {
         try {
           const to = toE164(provider.whatsapp);
+          if (publicSignupIntent) {
+            await deliverReply(req.log, to, EXISTING_PROVIDER_SIGNUP_REPLY);
+            return reply.send({ received: true });
+          }
           if (inbound.kind === "text" && !config.openai.apiKey) {
             return reply.send({ received: true });
           }
