@@ -104,7 +104,7 @@ interface OnboardingTokenRow {
 export interface LockedOnboarding {
   tokenId: string;
   sessionId: string;
-  inviteId: string;
+  inviteId: string | null;
   phone: string;
   phoneVerifiedAt: string;
   authUserId: string;
@@ -347,8 +347,9 @@ async function loadActiveOnboarding(token: string): Promise<{
        inv.created_at AS invite_created_at
      FROM private.whatsapp_onboarding_tokens tok
      JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
-     JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
-     WHERE tok.token_digest = ? AND ses.phone = inv.phone`,
+       LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
+     WHERE tok.token_digest = ?
+       AND (ses.entry_mode = 'public' OR ses.phone = inv.phone)`,
     tokenDigest(token),
   );
   if (!row) return undefined;
@@ -371,10 +372,10 @@ async function loadActiveOnboarding(token: string): Promise<{
     consumed_at: row.session_consumed_at,
   };
   const inviteRow: InviteRow = {
-    id: row.invite_id,
-    phone: row.invite_phone,
-    status: row.invite_status,
-    expires_at: row.invite_expires_at,
+    id: row.invite_id ?? "public",
+    phone: row.invite_phone ?? row.session_phone,
+    status: row.invite_status ?? "claimed",
+    expires_at: row.invite_expires_at ?? row.session_expires_at,
     claimed_at: row.invite_claimed_at,
     consumed_at: row.invite_consumed_at,
     created_at: row.invite_created_at,
@@ -461,7 +462,7 @@ export async function lockOnboardingForProvider(
   const row = await tx.queryOne<{
     token_id: string;
     session_id: string;
-    invite_id: string;
+    invite_id: string | null;
     phone: string;
     phone_verified_at: string;
   }>(
@@ -469,13 +470,14 @@ export async function lockOnboardingForProvider(
             ses.phone, ses.phone_verified_at
        FROM private.whatsapp_onboarding_tokens tok
        JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
-       JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
+       LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
       WHERE tok.token_digest = ?
         AND tok.consumed_at IS NULL AND tok.expires_at > now()
         AND ses.consumed_at IS NULL AND ses.expires_at > now()
         AND ses.auth_user_id = ?
-        AND inv.status = 'claimed' AND inv.expires_at > now()
-        AND ses.phone = inv.phone
+        AND (ses.entry_mode = 'public' OR (
+          inv.status = 'claimed' AND inv.expires_at > now() AND ses.phone = inv.phone
+        ))
       FOR UPDATE OF tok, ses, inv`,
     tokenDigest(rawToken),
     authUserId,
@@ -494,7 +496,7 @@ export async function consumeLockedOnboarding(
   tx: DatabaseClient,
   onboarding: LockedOnboarding,
 ): Promise<void> {
-  await tx.execute(
+  if (onboarding.inviteId) await tx.execute(
     "UPDATE private.whatsapp_onboarding_tokens SET consumed_at = now() WHERE id = ?",
     onboarding.tokenId,
   );
@@ -602,12 +604,13 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
           `SELECT ses.*
              FROM private.whatsapp_onboarding_tokens tok
              JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
-             JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
+             LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
             WHERE tok.token_digest = ?
               AND tok.consumed_at IS NULL AND tok.expires_at > now()
               AND ses.consumed_at IS NULL AND ses.expires_at > now()
-              AND inv.status = 'claimed' AND inv.expires_at > now()
-              AND ses.phone = inv.phone
+              AND (ses.entry_mode = 'public' OR (
+                inv.status = 'claimed' AND inv.expires_at > now() AND ses.phone = inv.phone
+              ))
             FOR UPDATE OF tok, ses, inv`,
           tokenDigest(req.params.token),
         );
@@ -653,12 +656,13 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
             `SELECT ses.*
                FROM private.whatsapp_onboarding_tokens tok
                JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
-               JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
+               LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
               WHERE tok.token_digest = ?
                 AND tok.consumed_at IS NULL AND tok.expires_at > now()
                 AND ses.consumed_at IS NULL AND ses.expires_at > now()
-                AND inv.status = 'claimed' AND inv.expires_at > now()
-                AND ses.phone = inv.phone
+                AND (ses.entry_mode = 'public' OR (
+                  inv.status = 'claimed' AND inv.expires_at > now() AND ses.phone = inv.phone
+                ))
               FOR UPDATE OF tok, ses, inv`,
             tokenDigest(req.params.token),
           );
