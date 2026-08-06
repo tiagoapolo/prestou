@@ -18,12 +18,40 @@ function positiveIntegerEnv(name: string, fallback: number): number {
 }
 
 function booleanEnv(name: string, fallback: boolean): boolean {
-  const value = env(name, fallback ? "true" : "false");
+  return booleanValue(name, process.env[name], fallback);
+}
+
+function booleanValue(name: string, value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined || value === "") return fallback;
   if (value !== "true" && value !== "false") {
     throw new Error(`Variável de ambiente deve ser true ou false: ${name}`);
   }
   return value === "true";
 }
+
+export type WhatsAppSignupMode = "disabled" | "invite_only" | "public";
+
+interface SignupModeEnvironment {
+  WHATSAPP_SIGNUP_MODE?: string;
+  WHATSAPP_SIGNUP_ENABLED?: string;
+}
+
+export function resolveSignupMode(
+  values: SignupModeEnvironment = process.env,
+): WhatsAppSignupMode {
+  const explicit = values.WHATSAPP_SIGNUP_MODE;
+  if (explicit !== undefined && explicit !== "") {
+    if (explicit === "disabled" || explicit === "invite_only" || explicit === "public") {
+      return explicit;
+    }
+    throw new Error("Variável de ambiente inválida: WHATSAPP_SIGNUP_MODE");
+  }
+  return booleanValue("WHATSAPP_SIGNUP_ENABLED", values.WHATSAPP_SIGNUP_ENABLED, false)
+    ? "invite_only"
+    : "disabled";
+}
+
+const signupMode = resolveSignupMode();
 
 function enumEnv<const T extends readonly string[]>(
   name: string,
@@ -66,13 +94,18 @@ export const config = {
     // extra no piloto sem guardar o código em claro.
     verificationSecret: env("WHATSAPP_VERIFICATION_SECRET"),
     signup: {
-      enabled: booleanEnv("WHATSAPP_SIGNUP_ENABLED", false),
+      mode: signupMode,
+      // Compatibilidade temporária: os consumidores atuais ainda tratam todo
+      // modo não desabilitado como onboarding disponível. As próximas slices
+      // passam a aplicar a origem da sessão contra `mode`.
+      enabled: signupMode !== "disabled",
       template: env("WHATSAPP_SIGNUP_TEMPLATE", "convite_prestador"),
       onboardingSecret: env("WHATSAPP_ONBOARDING_SECRET"),
       turnstileSecret: env("TURNSTILE_SECRET_KEY"),
       sessionTtlMinutes: positiveIntegerEnv("WHATSAPP_ONBOARDING_SESSION_TTL_MINUTES", 24 * 60),
       linkTtlMinutes: positiveIntegerEnv("WHATSAPP_ONBOARDING_LINK_TTL_MINUTES", 15),
       globalDailyLimit: positiveIntegerEnv("WHATSAPP_SIGNUP_GLOBAL_DAILY_LIMIT", 50),
+      entryDailyLimit: positiveIntegerEnv("WHATSAPP_SIGNUP_ENTRY_DAILY_LIMIT", 500),
       phoneDailyLimit: positiveIntegerEnv("WHATSAPP_SIGNUP_PHONE_DAILY_LIMIT", 3),
       emailCooldownSeconds: positiveIntegerEnv("WHATSAPP_SIGNUP_EMAIL_COOLDOWN_SECONDS", 60),
     },

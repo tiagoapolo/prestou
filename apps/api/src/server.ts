@@ -41,7 +41,7 @@ function assertRuntimeConfiguration(): void {
   if (!config.whatsapp.authTemplate) {
     throw new Error("WHATSAPP_AUTH_TEMPLATE é obrigatório em produção");
   }
-  if (config.whatsapp.signup.enabled && !config.whatsapp.signup.turnstileSecret) {
+  if (config.whatsapp.signup.mode !== "disabled" && !config.whatsapp.signup.turnstileSecret) {
     throw new Error("TURNSTILE_SECRET_KEY é obrigatória com cadastro por WhatsApp");
   }
 }
