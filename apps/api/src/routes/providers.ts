@@ -11,6 +11,7 @@ import {
   consumeLockedOnboarding,
   lockOnboardingForProvider,
 } from "../whatsapp-onboarding.js";
+import { track } from "../analytics.js";
 
 const municipalitySchema = z.object({
   name: requiredText("Cidade/município", 2, 60),
@@ -160,6 +161,7 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
           now,
           now,
         );
+        await track({ type: "cadastro_conta_criada", providerId: id, onboardingJourneyId: onboarding.journeyId }, tx);
         await consumeLockedOnboarding(tx, onboarding);
       });
     } catch (error) {

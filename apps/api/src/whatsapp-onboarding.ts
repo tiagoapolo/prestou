@@ -16,6 +16,7 @@ import { sendWhatsAppTemplate } from "./notify.js";
 import { nationalWhatsAppIdentityCandidates, type InboundMessage } from "./channels/whatsapp.js";
 import { mobileSchema, requiredText } from "./validation.js";
 import { parsePublicSignupIntent } from "./public-signup.js";
+import { track } from "./analytics.js";
 
 const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const emailSchema = z.string().trim().email().max(254);
@@ -108,6 +109,7 @@ export interface LockedOnboarding {
   phone: string;
   phoneVerifiedAt: string;
   authUserId: string;
+  journeyId: string;
 }
 
 interface PreparedAuthUser {
@@ -302,12 +304,13 @@ export async function startPublicWhatsAppOnboarding(
     if (existing) return undefined;
 
     const sessionId = newId();
+    const journeyId = "journeyId" in intent ? intent.journeyId : newId();
     await tx.execute(
       `INSERT INTO private.whatsapp_onboarding_sessions
          (id, entry_mode, onboarding_journey_id, attribution, phone, phone_verified_at, expires_at)
        VALUES (?, 'public', ?, ?::text::jsonb, ?, now(), now() + (? * interval '1 minute'))`,
       sessionId,
-      "journeyId" in intent ? intent.journeyId : newId(),
+      journeyId,
       JSON.stringify(intent.attribution),
       phone,
       config.whatsapp.signup.sessionTtlMinutes,
@@ -318,6 +321,8 @@ export async function startPublicWhatsAppOnboarding(
        VALUES (?, ?, ?, now() + (? * interval '1 minute'))`,
       newId(), sessionId, tokenDigest(rawToken), config.whatsapp.signup.linkTtlMinutes,
     );
+    await track({ type: "cadastro_whatsapp_iniciado", onboardingJourneyId: journeyId, metadata: { entryMode: "public" } }, tx);
+    await track({ type: "cadastro_link_emitido", onboardingJourneyId: journeyId }, tx);
     return rawToken;
   });
 }
@@ -465,9 +470,10 @@ export async function lockOnboardingForProvider(
     invite_id: string | null;
     phone: string;
     phone_verified_at: string;
+    onboarding_journey_id: string;
   }>(
     `SELECT tok.id AS token_id, ses.id AS session_id, inv.id AS invite_id,
-            ses.phone, ses.phone_verified_at
+            ses.phone, ses.phone_verified_at, ses.onboarding_journey_id
        FROM private.whatsapp_onboarding_tokens tok
        JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
        LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
@@ -489,6 +495,7 @@ export async function lockOnboardingForProvider(
     phone: row.phone,
     phoneVerifiedAt: row.phone_verified_at,
     authUserId,
+    journeyId: row.onboarding_journey_id,
   } : undefined;
 }
 
