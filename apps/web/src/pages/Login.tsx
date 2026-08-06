@@ -83,7 +83,7 @@ export function LoginPage() {
     <main className="auth-page">
       <section className="auth-card">
         <div className="brand hero-brand">prestou<span>.</span></div>
-        <p className="eyebrow">{onboardingToken ? "Cadastro por convite" : "Seu Pix, sem perseguição"}</p>
+        <p className="eyebrow">{onboardingToken ? "Cadastro pelo WhatsApp" : "Seu Pix, sem perseguição"}</p>
         <h1>{sent ? "Confira seu e-mail" : onboardingToken ? "Conclua seu cadastro" : "Entre no seu painel"}</h1>
         {sent ? (
           <div className="stack">
@@ -116,6 +116,7 @@ export function LoginPage() {
               {onboardingToken ? "Receber link para concluir" : "Receber link para entrar"}
             </Button>
             <small>Sem senha. O link expira e só funciona para você.</small>
+            {onboardingToken ? null : <Link className="legal-link" to="/comecar">Ainda não tem conta? Comece pelo WhatsApp</Link>}
           </form>
         )}
         <Link className="legal-link auth-legal-link" to="/privacidade">Política de Privacidade</Link>

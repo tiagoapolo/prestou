@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireProvider } from "../auth.js";
+import { requireAppAdmin, requireProvider } from "../auth.js";
 import { funnel, track, type EventType } from "../analytics.js";
 import { runReminders } from "../reminders.js";
 import { config } from "../config.js";
@@ -51,6 +51,15 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
   /** Dashboard interno do funil — inclui o vazamento que decide o PSP na V2. */
   app.get("/api/insights/funnel", { preHandler: requireProvider }, async (req) => {
     return await funnel(req.provider!.id);
+  });
+
+  app.get("/api/admin/insights/signup", { preHandler: requireAppAdmin }, async () => {
+    const result = await funnel();
+    const signupTypes = new Set([
+      "cadastro_entrada_aberta", "cadastro_whatsapp_iniciado", "cadastro_link_emitido",
+      "cadastro_link_aberto", "cadastro_email_autorizado", "cadastro_conta_criada",
+    ]);
+    return { events: result.events.filter((event) => signupTypes.has(event.type)) };
   });
 
   /**

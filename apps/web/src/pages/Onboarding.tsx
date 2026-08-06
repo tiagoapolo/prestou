@@ -27,7 +27,7 @@ export function OnboardingPage() {
     publicApi<{ phoneMasked: string }>(
       `/public/whatsapp-onboarding/${encodeURIComponent(onboardingToken)}`,
     ).then((result) => setPhoneMasked(result.phoneMasked))
-      .catch((cause) => setError(userMessage(cause, "Este convite é inválido ou expirou.")));
+      .catch((cause) => setError(userMessage(cause, "Este link de cadastro é inválido ou expirou.")));
   }, [onboardingToken]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
