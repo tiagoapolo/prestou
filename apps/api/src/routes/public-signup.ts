@@ -32,9 +32,12 @@ export async function publicSignupRoutes(
 ): Promise<void> {
   const mode = options.mode ?? (() => config.whatsapp.signup.mode);
   const publicPhone = options.publicPhone ?? config.whatsapp.publicPhone;
+  // `env()` devolve "" quando a variável falta: com `??` a assinatura sairia com
+  // segredo vazio e o webhook (que usa `||`) rejeitaria o token, derrubando a
+  // jornada e a atribuição para "direct".
   const onboardingSecret = options.onboardingSecret
-    ?? config.whatsapp.signup.onboardingSecret
-    ?? config.supabase.serviceRoleKey;
+    || config.whatsapp.signup.onboardingSecret
+    || config.supabase.serviceRoleKey;
   const trackEntry = options.track ?? track;
 
   app.get("/public/whatsapp-signup", async () => ({ isAvailable: mode() === "public" }));

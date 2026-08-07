@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import {
+  canonicalNationalWhatsApp,
   chargeConfirmationPayload,
   createdChargeMessages,
   parseInboundMessage,
@@ -120,6 +121,15 @@ test("nationalWhatsAppIdentityCandidates remove somente o código do país", () 
     nationalWhatsAppIdentityCandidates("5555998765432"),
     ["55998765432", "5598765432"],
   );
+});
+
+test("canonicalNationalWhatsApp escolhe o formato com nono dígito em qualquer ordem", () => {
+  // wa_id sem o nono dígito: o candidato canônico é o segundo.
+  assert.equal(canonicalNationalWhatsApp("554198826061"), "41998826061");
+  // wa_id já com o nono dígito: o canônico é o primeiro.
+  assert.equal(canonicalNationalWhatsApp("5541998826061"), "41998826061");
+  // Sem formato móvel brasileiro não há identidade canônica a persistir.
+  assert.equal(canonicalNationalWhatsApp("15551234567"), undefined);
 });
 
 test("ação e payload dos botões usam somente o ID da proposta", () => {

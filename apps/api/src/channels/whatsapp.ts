@@ -154,6 +154,21 @@ export function nationalWhatsAppIdentityCandidates(from: string): [string, strin
   return [first.replace(/^55/, ""), second.replace(/^55/, "")];
 }
 
+/** Formato persistido em `providers.whatsapp` e nas sessões: DDD + nono dígito. */
+const NATIONAL_MOBILE = /^[1-9][0-9]9[0-9]{8}$/;
+
+/**
+ * Forma canônica para gravar identidade nova (sem linha existente para resolver).
+ * A ordem dos candidatos depende de a Meta entregar ou não o nono dígito, então
+ * escolhemos pelo formato — não pelo índice. Sem candidato válido (número
+ * estrangeiro, por exemplo) não há identidade a persistir.
+ */
+export function canonicalNationalWhatsApp(from: string): string | undefined {
+  return nationalWhatsAppIdentityCandidates(from).find((candidate) =>
+    NATIONAL_MOBILE.test(candidate)
+  );
+}
+
 /**
  * Extrai a primeira mensagem de texto de um payload de webhook da Cloud API.
  * Ignora status updates, reações e tipos não suportados nesta etapa (áudio é V2).

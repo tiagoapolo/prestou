@@ -35,6 +35,7 @@ import {
 } from "../whatsapp-service-window.js";
 import {
   invalidateOnboardingToken,
+  markOnboardingLinkDelivered,
   invitedSignupMessage,
   startPublicWhatsAppOnboarding,
   startInvitedWhatsAppOnboarding,
@@ -499,11 +500,18 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
                 true,
               );
             } catch (error) {
-              // Se a Meta não recebeu o link, invalida-o para que uma nova
-              // mensagem possa emitir outro sem manter uma credencial perdida.
-              await invalidateOnboardingToken(signupToken);
+              // Se a Meta não recebeu o link, invalida-o para não deixar uma
+              // credencial perdida em pé. É só o caminho rápido: se esta própria
+              // compensação falhar (banco fora, por exemplo), a ausência de
+              // `delivered_at` já libera a rotação na mensagem seguinte. Por isso
+              // ela não pode substituir o erro de entrega, que é o diagnóstico
+              // que interessa no log.
+              await invalidateOnboardingToken(signupToken).catch((cleanupError) => {
+                req.log.error({ err: cleanupError }, "falha ao invalidar token de onboarding");
+              });
               throw error;
             }
+            await markOnboardingLinkDelivered(signupToken);
           }
         } catch (error) {
           req.log.error({ err: error }, "whatsapp onboarding processing failed");

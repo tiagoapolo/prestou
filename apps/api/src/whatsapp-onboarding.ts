@@ -13,7 +13,11 @@ import {
 } from "./db.js";
 import { newId } from "./ids.js";
 import { sendWhatsAppTemplate } from "./notify.js";
-import { nationalWhatsAppIdentityCandidates, type InboundMessage } from "./channels/whatsapp.js";
+import {
+  canonicalNationalWhatsApp,
+  nationalWhatsAppIdentityCandidates,
+  type InboundMessage,
+} from "./channels/whatsapp.js";
 import { mobileSchema, requiredText } from "./validation.js";
 import { parsePublicSignupIntent } from "./public-signup.js";
 import { track } from "./analytics.js";
@@ -156,17 +160,33 @@ async function incrementOnboardingCounter(
   return row?.count ?? Number.MAX_SAFE_INTEGER;
 }
 
+/** Leitura da cota já gasta, para checar limite sem consumi-lo. */
+async function onboardingCounterValue(
+  tx: DatabaseClient,
+  scope: string,
+  scopeId: string,
+): Promise<number> {
+  const row = await tx.queryOne<{ count: number }>(
+    `SELECT count FROM private.whatsapp_onboarding_counters
+      WHERE scope = ? AND scope_id = ? AND window_start = date_trunc('day', now())`,
+    scope,
+    scopeId,
+  );
+  return Number(row?.count ?? 0);
+}
+
 /**
  * Para número ainda sem provider, reivindica um convite pelo inbound assinado e
  * emite um único link bearer de curta duração. Não chama Auth nem LLM.
  */
 export async function startInvitedWhatsAppOnboarding(
   inbound: InboundMessage,
+  deps: OnboardingTransactionDeps = {},
 ): Promise<string | undefined> {
   if (!config.whatsapp.signup.enabled) return undefined;
   const candidates = nationalWhatsAppIdentityCandidates(inbound.from);
 
-  return withTransaction(async (tx) => {
+  return (deps.runTransaction ?? withTransaction)(async (tx) => {
     const invite = await tx.queryOne<InviteRow>(
       `SELECT * FROM private.whatsapp_signup_invites
         WHERE phone IN (?, ?)
@@ -240,14 +260,16 @@ export async function startInvitedWhatsAppOnboarding(
       ))!;
     }
 
+    // Uma segunda mensagem não gira um link que a pessoa já recebeu: isso
+    // preservaria a página aberta e evita amplificação de spam. Mas só a entrega
+    // confirmada prova que existe página aberta — mesma regra da entrada pública.
     const activeToken = await tx.queryOne<{ id: string }>(
       `SELECT id FROM private.whatsapp_onboarding_tokens
-        WHERE session_id = ? AND consumed_at IS NULL AND expires_at > now()
+        WHERE session_id = ? AND consumed_at IS NULL AND delivered_at IS NOT NULL
+          AND expires_at > now()
         FOR UPDATE`,
       session.id,
     );
-    // Uma segunda mensagem não gira nem reenvia um link ainda válido. Isso
-    // preserva a página que o convidado já abriu e evita amplificação de spam.
     if (activeToken) return undefined;
 
     await tx.execute(
@@ -274,15 +296,24 @@ export async function startInvitedWhatsAppOnboarding(
  * Entrada self-serve: somente a frase assinada/exata cria estado. Mensagens
  * desconhecidas continuam fora da LLM e não ganham resposta.
  */
+/** Injeção usada só pelos testes: em produção a transação é a do pool. */
+export interface OnboardingTransactionDeps {
+  runTransaction?: <T>(fn: (tx: DatabaseClient) => Promise<T>) => Promise<T>;
+}
+
 export async function startPublicWhatsAppOnboarding(
   inbound: InboundMessage,
+  deps: OnboardingTransactionDeps = {},
 ): Promise<string | undefined> {
   if (config.whatsapp.signup.mode !== "public" || inbound.kind !== "text") return undefined;
   const intent = parsePublicSignupIntent(inbound.text, { secret: onboardingSecret });
   if (!intent) return undefined;
-  const [phone] = nationalWhatsAppIdentityCandidates(inbound.from);
+  // Diferente do convite, aqui não há telefone canônico já gravado por um admin:
+  // a identidade nasce do wa_id, que a Meta pode entregar sem o nono dígito.
+  const phone = canonicalNationalWhatsApp(inbound.from);
+  if (!phone) return undefined;
 
-  return withTransaction(async (tx) => {
+  return (deps.runTransaction ?? withTransaction)(async (tx) => {
     await tx.execute("SELECT pg_advisory_xact_lock(hashtext(?))", phone);
     const admitted = await tx.execute(
       `INSERT INTO private.whatsapp_onboarding_messages (message_id, phone)
@@ -292,39 +323,71 @@ export async function startPublicWhatsAppOnboarding(
     );
     if (admitted.changes === 0) return undefined;
 
-    const phoneCount = await incrementOnboardingCounter(tx, "phone_day", phone);
-    if (phoneCount > config.whatsapp.signup.phoneDailyLimit) return undefined;
+    // Disjuntor global do funil: limita trabalho, não entrega, então continua
+    // sendo cobrado antes de tentar enviar. Já a cota por telefone mede links
+    // efetivamente entregues e só é gasta em markOnboardingLinkDelivered — do
+    // contrário três falhas de envio calariam o número até a virada do dia.
     const globalCount = await incrementOnboardingCounter(tx, "global_day", "all");
     if (globalCount > config.whatsapp.signup.globalDailyLimit) return undefined;
+    const deliveredToday = await onboardingCounterValue(tx, "phone_day", phone);
+    if (deliveredToday >= config.whatsapp.signup.phoneDailyLimit) return undefined;
 
-    const existing = await tx.queryOne<SessionRow>(
+    // A sessão é reaproveitada: ela carrega a jornada, a atribuição e o telefone
+    // já verificado. Recriá-la a cada mensagem quebraria a atribuição e deixaria
+    // sessões órfãs para a mesma pessoa.
+    let session = await tx.queryOne<SessionRow>(
       `SELECT * FROM private.whatsapp_onboarding_sessions
         WHERE phone = ? AND entry_mode = 'public' AND consumed_at IS NULL AND expires_at > now()
         FOR UPDATE`,
       phone,
     );
-    if (existing) return undefined;
+    if (!session) {
+      const sessionId = newId();
+      const journeyId = "journeyId" in intent ? intent.journeyId : newId();
+      await tx.execute(
+        `INSERT INTO private.whatsapp_onboarding_sessions
+           (id, entry_mode, onboarding_journey_id, attribution, phone, phone_verified_at, expires_at)
+         VALUES (?, 'public', ?, ?::text::jsonb, ?, now(), now() + (? * interval '1 minute'))`,
+        sessionId,
+        journeyId,
+        JSON.stringify(intent.attribution),
+        phone,
+        config.whatsapp.signup.sessionTtlMinutes,
+      );
+      session = (await tx.queryOne<SessionRow>(
+        "SELECT * FROM private.whatsapp_onboarding_sessions WHERE id = ?",
+        sessionId,
+      ))!;
+      await track({ type: "cadastro_whatsapp_iniciado", onboardingJourneyId: journeyId, metadata: { entryMode: "public" } }, tx);
+    }
 
-    const sessionId = newId();
-    const journeyId = "journeyId" in intent ? intent.journeyId : newId();
+    // Só um link comprovadamente entregue e ainda válido impede a rotação:
+    // rotacionar aí derrubaria a página que a pessoa acabou de abrir. Token sem
+    // entrega confirmada não preserva nada, então pode (e deve) ser trocado.
+    const deliveredToken = await tx.queryOne<{ id: string }>(
+      `SELECT id FROM private.whatsapp_onboarding_tokens
+        WHERE session_id = ? AND consumed_at IS NULL AND delivered_at IS NOT NULL
+          AND expires_at > now()
+        FOR UPDATE`,
+      session.id,
+    );
+    if (deliveredToken) return undefined;
+
+    // uq_whatsapp_onboarding_active_token admite um único token não consumido
+    // por sessão: o anterior precisa sair antes de emitir o novo.
     await tx.execute(
-      `INSERT INTO private.whatsapp_onboarding_sessions
-         (id, entry_mode, onboarding_journey_id, attribution, phone, phone_verified_at, expires_at)
-       VALUES (?, 'public', ?, ?::text::jsonb, ?, now(), now() + (? * interval '1 minute'))`,
-      sessionId,
-      journeyId,
-      JSON.stringify(intent.attribution),
-      phone,
-      config.whatsapp.signup.sessionTtlMinutes,
+      `UPDATE private.whatsapp_onboarding_tokens
+          SET consumed_at = now()
+        WHERE session_id = ? AND consumed_at IS NULL`,
+      session.id,
     );
     const rawToken = newOnboardingToken();
     await tx.execute(
       `INSERT INTO private.whatsapp_onboarding_tokens (id, session_id, token_digest, expires_at)
        VALUES (?, ?, ?, now() + (? * interval '1 minute'))`,
-      newId(), sessionId, tokenDigest(rawToken), config.whatsapp.signup.linkTtlMinutes,
+      newId(), session.id, tokenDigest(rawToken), config.whatsapp.signup.linkTtlMinutes,
     );
-    await track({ type: "cadastro_whatsapp_iniciado", onboardingJourneyId: journeyId, metadata: { entryMode: "public" } }, tx);
-    await track({ type: "cadastro_link_emitido", onboardingJourneyId: journeyId }, tx);
+    await track({ type: "cadastro_link_emitido", onboardingJourneyId: session.onboarding_journey_id }, tx);
     return rawToken;
   });
 }
@@ -507,7 +570,9 @@ export async function consumeLockedOnboarding(
   tx: DatabaseClient,
   onboarding: LockedOnboarding,
 ): Promise<void> {
-  if (onboarding.inviteId) await tx.execute(
+  // A credencial bearer é consumida sempre: sessão pública não tem convite, e o
+  // `if` anterior deixava o token da entrada pública vivo até expirar.
+  await tx.execute(
     "UPDATE private.whatsapp_onboarding_tokens SET consumed_at = now() WHERE id = ?",
     onboarding.tokenId,
   );
@@ -515,7 +580,7 @@ export async function consumeLockedOnboarding(
     "UPDATE private.whatsapp_onboarding_sessions SET consumed_at = now() WHERE id = ?",
     onboarding.sessionId,
   );
-  await tx.execute(
+  if (onboarding.inviteId) await tx.execute(
     `UPDATE private.whatsapp_signup_invites
         SET status = 'consumed', consumed_at = now()
       WHERE id = ?`,
@@ -525,6 +590,38 @@ export async function consumeLockedOnboarding(
     "DELETE FROM private.whatsapp_onboarding_auth_users WHERE auth_user_id = ?",
     onboarding.authUserId,
   );
+}
+
+/**
+ * Fecha o ciclo do link: confirma a entrega e só então cobra a cota do telefone.
+ * Enquanto isto não roda, o token segue rotacionável — é assim que uma falha de
+ * envio, ou uma queda entre o commit e a chamada à Meta, se corrige sozinha na
+ * mensagem seguinte, sem depender de a compensação ter conseguido rodar. Falhar
+ * aqui depois de um envio bem-sucedido só faz a próxima mensagem emitir outro
+ * link: erra para o lado de a pessoa ter um link que funciona.
+ */
+export async function markOnboardingLinkDelivered(
+  rawToken: string,
+  deps: OnboardingTransactionDeps = {},
+): Promise<void> {
+  if (!tokenSchema.safeParse(rawToken).success) return;
+  await (deps.runTransaction ?? withTransaction)(async (tx) => {
+    const row = await tx.queryOne<{ phone: string; entry_mode: string }>(
+      `UPDATE private.whatsapp_onboarding_tokens tok
+          SET delivered_at = now()
+         FROM private.whatsapp_onboarding_sessions ses
+        WHERE ses.id = tok.session_id
+          AND tok.token_digest = ?
+          AND tok.consumed_at IS NULL
+          AND tok.delivered_at IS NULL
+        RETURNING ses.phone, ses.entry_mode`,
+      tokenDigest(rawToken),
+    );
+    // O fluxo de convite cobra a cota na emissão, com telefone canônico vindo do
+    // convite; aqui só a entrada pública fecha a conta na entrega.
+    if (row?.entry_mode !== "public") return;
+    await incrementOnboardingCounter(tx, "phone_day", row.phone);
+  });
 }
 
 export async function invalidateOnboardingToken(rawToken: string): Promise<void> {
