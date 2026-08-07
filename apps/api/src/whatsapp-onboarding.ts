@@ -123,6 +123,28 @@ interface PreparedAuthUser {
   created: boolean;
 }
 
+/**
+ * Revalida e trava a sessão viva de um token, nas duas etapas da rota de e-mail.
+ *
+ * O convite entra como LEFT JOIN desde que a sessão pública passou a existir sem
+ * convite — e o Postgres recusa `FOR UPDATE` no lado anulável de um outer join
+ * (0A000), em tempo de plano, exista ou não a linha do convite. Travar `tok` e
+ * `ses` basta: o convite só é lido para validar, e a revogação no admin apaga a
+ * sessão, então ela própria bloqueia no lock. Era uma cópia idêntica em dois
+ * lugares, e o erro estava nas duas.
+ */
+const LOCK_ACTIVE_SESSION_BY_TOKEN = `SELECT ses.*
+   FROM private.whatsapp_onboarding_tokens tok
+   JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
+   LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
+  WHERE tok.token_digest = ?
+    AND tok.consumed_at IS NULL AND tok.expires_at > now()
+    AND ses.consumed_at IS NULL AND ses.expires_at > now()
+    AND (ses.entry_mode = 'public' OR (
+      inv.status = 'claimed' AND inv.expires_at > now() AND ses.phone = inv.phone
+    ))
+  FOR UPDATE OF tok, ses`;
+
 function tokenDigest(token: string): string {
   return createHmac("sha256", onboardingSecret).update(token).digest("hex");
 }
@@ -539,6 +561,11 @@ export async function lockOnboardingForProvider(
     phone_verified_at: string;
     onboarding_journey_id: string;
   }>(
+    // O convite entrou como LEFT JOIN quando a sessão pública passou a existir
+    // sem convite, e o Postgres recusa FOR UPDATE no lado anulável de um outer
+    // join (0A000) — em tempo de plano, com ou sem linha de convite. Travar
+    // `ses` já basta: o convite só é lido para validar, e a revogação no admin
+    // apaga a sessão, então bloqueia no lock dela.
     `SELECT tok.id AS token_id, ses.id AS session_id, inv.id AS invite_id,
             ses.phone, ses.phone_verified_at, ses.onboarding_journey_id
        FROM private.whatsapp_onboarding_tokens tok
@@ -551,7 +578,7 @@ export async function lockOnboardingForProvider(
         AND (ses.entry_mode = 'public' OR (
           inv.status = 'claimed' AND inv.expires_at > now() AND ses.phone = inv.phone
         ))
-      FOR UPDATE OF tok, ses, inv`,
+      FOR UPDATE OF tok, ses`,
     tokenDigest(rawToken),
     authUserId,
   );
@@ -710,17 +737,7 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
         // Revalida e trava o token exato depois do CAPTCHA. Assim, revogação,
         // expiração ou rotação ocorrida durante o desafio não autoriza o Auth.
         const session = await tx.queryOne<SessionRow>(
-          `SELECT ses.*
-             FROM private.whatsapp_onboarding_tokens tok
-             JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
-             LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
-            WHERE tok.token_digest = ?
-              AND tok.consumed_at IS NULL AND tok.expires_at > now()
-              AND ses.consumed_at IS NULL AND ses.expires_at > now()
-              AND (ses.entry_mode = 'public' OR (
-                inv.status = 'claimed' AND inv.expires_at > now() AND ses.phone = inv.phone
-              ))
-            FOR UPDATE OF tok, ses, inv`,
+          LOCK_ACTIVE_SESSION_BY_TOKEN,
           tokenDigest(req.params.token),
         );
         if (!session) return { status: "expired" as const };
@@ -762,17 +779,7 @@ export async function whatsappOnboardingRoutes(app: FastifyInstance): Promise<vo
         }
         await withTransaction(async (tx) => {
           const session = await tx.queryOne<SessionRow>(
-            `SELECT ses.*
-               FROM private.whatsapp_onboarding_tokens tok
-               JOIN private.whatsapp_onboarding_sessions ses ON ses.id = tok.session_id
-               LEFT JOIN private.whatsapp_signup_invites inv ON inv.id = ses.invite_id
-              WHERE tok.token_digest = ?
-                AND tok.consumed_at IS NULL AND tok.expires_at > now()
-                AND ses.consumed_at IS NULL AND ses.expires_at > now()
-                AND (ses.entry_mode = 'public' OR (
-                  inv.status = 'claimed' AND inv.expires_at > now() AND ses.phone = inv.phone
-                ))
-              FOR UPDATE OF tok, ses, inv`,
+            LOCK_ACTIVE_SESSION_BY_TOKEN,
             tokenDigest(req.params.token),
           );
           if (!session || session.id !== reservation.sessionId ||
