@@ -69,4 +69,47 @@ describe("nova cobrança", () => {
       });
     });
   });
+
+  it("exige data final, mostra a prévia e envia a recorrência mensal", async () => {
+    render(<MemoryRouter><NewChargePage /></MemoryRouter>);
+
+    fireEvent.change(await screen.findByLabelText("Nome do cliente"), {
+      target: { value: "Maria Cliente" },
+    });
+    fireEvent.change(screen.getByLabelText("WhatsApp"), {
+      target: { value: "11977776666" },
+    });
+    fireEvent.change(screen.getByLabelText("Serviço"), {
+      target: { value: "Manutenção" },
+    });
+    fireEvent.change(screen.getByLabelText("Valor (R$)"), {
+      target: { value: "15000" },
+    });
+    fireEvent.change(screen.getByLabelText("Vencimento"), {
+      target: { value: "15082026" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", {
+      name: "Repetir esta cobrança todo mês",
+    }));
+    fireEvent.change(await screen.findByLabelText("Data final da série"), {
+      target: { value: "15012027" },
+    });
+
+    const preview = screen.getByRole("status").textContent ?? "";
+    expect(preview).toContain("6 cobranças mensais");
+    expect(preview).toContain("15/08/2026");
+    expect(preview).toContain("15/01/2027");
+    expect(preview).toContain("Só a primeira será criada agora");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: "Criar e preparar mensagem",
+    }));
+
+    await waitFor(() => {
+      const call = mockApi.mock.calls.find(([path]) => path === "/api/charges");
+      expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+        recurrence: { frequency: "monthly", endDate: "2027-01-15" },
+      });
+    });
+  });
 });

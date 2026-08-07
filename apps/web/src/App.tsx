@@ -12,6 +12,7 @@ import { PrivacyPage } from "./pages/Privacy";
 import { FinancialPage } from "./pages/Financial";
 import { AdminPage } from "./pages/Admin";
 import { StartPage } from "./pages/Start";
+import { ChargeSeriesPage } from "./pages/ChargeSeries";
 
 function PrivateApp() {
   const auth = useAuth();
@@ -26,6 +27,7 @@ function PrivateApp() {
         <Route path="financeiro" element={<FinancialPage />} />
         <Route path="nova" element={<NewChargePage />} />
         <Route path="cobranca/:id" element={<ChargeDetailPage />} />
+        <Route path="series/:id" element={<ChargeSeriesPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />
       </Route>

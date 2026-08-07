@@ -126,9 +126,9 @@ function AssistantCommand({
 }
 
 function ChargeCard({ item }: { item: ChargeItem }) {
-  return <Card asChild className="charge-card"><Link to={`/cobranca/${item.chargeId}`}>
+  return <Card asChild className="charge-card"><Link to={`/cobranca/${item.paymentId}`}>
     <div className={`status-dot ${item.status}`} />
-    <div className="charge-main"><strong>{item.client.name}</strong><span>{item.description} · vence {date(item.dueDate)}</span></div>
+    <div className="charge-main"><strong>{item.client.name}</strong><span>{item.description}{item.recurrence ? ` · Mensalidade ${item.recurrence.sequence} de ${item.recurrence.occurrences}` : ""} · vence {date(item.dueDate)}</span></div>
     <div className="charge-value"><strong>{item.amountLabel}</strong><Badge variant="secondary" className={`badge ${item.status}`}>{labels[item.status]}</Badge></div>
   </Link></Card>;
 }

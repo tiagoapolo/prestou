@@ -2,17 +2,23 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { queryAll, queryOne, withTransaction } from "../db.js";
 import { requireProvider } from "../auth.js";
-import { chargeDraftSchema, createCharge } from "../charge-creation.js";
+import {
+  chargeDraftBaseSchema,
+  createCharge,
+  validateChargeRecurrence,
+} from "../charge-creation.js";
+import { createMonthlyChargeSeries } from "../charge-series.js";
 import { chargeMessage, paymentUrl, waMeLink, formatBRL } from "../messages.js";
 import { derivedStatus, todayISO } from "../state.js";
 import type { ChargeRow, ClientRow, PaymentRow } from "../types.js";
 import { isoDateSchema, validationMessage } from "../validation.js";
+import { monthlyOccurrenceCount } from "../recurrence.js";
 
-const createChargeSchema = chargeDraftSchema.extend({
+const createChargeSchema = chargeDraftBaseSchema.extend({
   /** Duração do preenchimento no cliente, para medir a meta de 60s (F2). */
   fillMs: z.number().int().nonnegative().optional(),
   source: z.enum(["form", "assistant"]).default("form"),
-});
+}).superRefine(validateChargeRecurrence);
 
 const paginationSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -42,7 +48,28 @@ type ChargeListRow = PaymentRow & {
   client_name: string;
   client_whatsapp: string;
   charge_id: string;
+  charge_series_id: string | null;
+  series_sequence: number | null;
+  series_first_due_date: string | null;
+  series_end_date: string | null;
+  series_anchor_day: number | null;
 };
+
+function recurrenceOutput(row: ChargeListRow) {
+  if (
+    !row.charge_series_id || !row.series_sequence || !row.series_first_due_date
+    || !row.series_end_date || !row.series_anchor_day
+  ) return null;
+  return {
+    seriesId: row.charge_series_id,
+    sequence: row.series_sequence,
+    occurrences: monthlyOccurrenceCount(
+      row.series_first_due_date,
+      row.series_end_date,
+      row.series_anchor_day,
+    ),
+  };
+}
 
 function pagination(page: number, pageSize: number, total: number) {
   return {
@@ -90,9 +117,15 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
 
     let created;
     try {
-      created = await withTransaction((tx) =>
-        createCharge(tx, provider, body, body.source, body.fillMs)
-      );
+      created = await withTransaction((tx) => body.recurrence
+        ? createMonthlyChargeSeries(
+            tx,
+            provider,
+            { ...body, recurrence: body.recurrence },
+            body.source,
+            body.fillMs,
+          )
+        : createCharge(tx, provider, body, body.source, body.fillMs));
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode ?? 500;
       if (status === 400 || status === 422) {
@@ -158,10 +191,14 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
     const total = Number(totalRow?.total ?? 0);
     const rows = await queryAll<ChargeListRow>(
       `SELECT p.*, c.description, c.client_id, cl.name AS client_name,
-              cl.whatsapp AS client_whatsapp, c.id AS charge_id
+              cl.whatsapp AS client_whatsapp, c.id AS charge_id,
+              c.charge_series_id, c.series_sequence,
+              s.first_due_date AS series_first_due_date,
+              s.end_date AS series_end_date, s.anchor_day AS series_anchor_day
          FROM payments p
          JOIN charges c ON c.id = p.charge_id
          JOIN clients cl ON cl.id = c.client_id
+         LEFT JOIN charge_series s ON s.id = c.charge_series_id
         WHERE ${where}
         ORDER BY p.created_at DESC, p.id DESC
         LIMIT ? OFFSET ?`,
@@ -186,6 +223,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
         amountCents: r.amount_cents,
         amountLabel: formatBRL(r.amount_cents),
         dueDate: r.due_date,
+        recurrence: recurrenceOutput(r),
         status,
         client: { id: r.client_id, name: r.client_name, whatsapp: r.client_whatsapp },
         paymentUrl: paymentUrl(r.public_token),
@@ -274,10 +312,14 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
     const total = Number(totalRow?.total ?? 0);
     const rows = await queryAll<ChargeListRow>(
       `SELECT p.*, c.description, c.client_id, cl.name AS client_name,
-              cl.whatsapp AS client_whatsapp, c.id AS charge_id
+              cl.whatsapp AS client_whatsapp, c.id AS charge_id,
+              c.charge_series_id, c.series_sequence,
+              s.first_due_date AS series_first_due_date,
+              s.end_date AS series_end_date, s.anchor_day AS series_anchor_day
          FROM payments p
          JOIN charges c ON c.id = p.charge_id
          JOIN clients cl ON cl.id = c.client_id
+         LEFT JOIN charge_series s ON s.id = c.charge_series_id
         WHERE c.provider_id = ?
           AND p.financial_voided_at IS NULL
           AND p.due_date >= ? AND p.due_date < ?
@@ -315,6 +357,7 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
         description: row.description,
         amountCents: row.amount_cents,
         dueDate: row.due_date,
+        recurrence: recurrenceOutput(row),
         status: derivedStatus(row),
         client: {
           id: row.client_id,
@@ -335,30 +378,35 @@ export async function chargeRoutes(app: FastifyInstance): Promise<void> {
 
   /** Detalhe de uma cobrança (tela de validação do comprovante). */
   app.get<{ Params: { id: string } }>("/api/charges/:id", async (req, reply) => {
-    const row = await queryOne<
-      PaymentRow & {
-        description: string;
-        client_name: string;
-        client_whatsapp: string;
-      }
-    >(
-      `SELECT p.*, c.description, cl.name AS client_name, cl.whatsapp AS client_whatsapp
+    const row = await queryOne<ChargeListRow>(
+      `SELECT p.*, c.id AS charge_id, c.client_id, c.description,
+              cl.name AS client_name, cl.whatsapp AS client_whatsapp,
+              c.charge_series_id, c.series_sequence,
+              s.first_due_date AS series_first_due_date,
+              s.end_date AS series_end_date, s.anchor_day AS series_anchor_day
          FROM payments p
          JOIN charges c ON c.id = p.charge_id
          JOIN clients cl ON cl.id = c.client_id
-        WHERE c.id = ? AND c.provider_id = ?`,
+         LEFT JOIN charge_series s ON s.id = c.charge_series_id
+        WHERE (p.id = ? OR c.id = ?) AND c.provider_id = ?
+        ORDER BY CASE WHEN p.id = ? THEN 0 ELSE 1 END, p.seq
+        LIMIT 1`,
+      req.params.id,
       req.params.id,
       req.provider!.id,
+      req.params.id,
     );
 
     if (!row) return reply.code(404).send({ error: "Cobrança não encontrada" });
 
     return {
       paymentId: row.id,
+      chargeId: row.charge_id,
       description: row.description,
       amountCents: row.amount_cents,
       amountLabel: formatBRL(row.amount_cents),
       dueDate: row.due_date,
+      recurrence: recurrenceOutput(row),
       status: derivedStatus(row),
       client: { name: row.client_name, whatsapp: row.client_whatsapp },
       paymentUrl: paymentUrl(row.public_token),

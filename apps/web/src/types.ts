@@ -24,6 +24,7 @@ export interface ChargeItem {
   amountCents: number;
   amountLabel: string;
   dueDate: string;
+  recurrence: { seriesId: string; sequence: number; occurrences: number } | null;
   status: PaymentStatus;
   client: { name: string; whatsapp: string };
   paymentUrl: string;
@@ -42,6 +43,41 @@ export interface DashboardData {
     atrasadasCount: number;
     aguardandoValidacaoCount: number;
   };
+}
+
+export type ChargeSeriesStatus = "ativa" | "pausada" | "cancelada" | "concluida";
+
+export interface ChargeSeries {
+  id: string;
+  status: ChargeSeriesStatus;
+  description: string;
+  amountCents: number;
+  amountLabel: string;
+  firstDueDate: string;
+  dueDay: number;
+  endDate: string;
+  nextDueDate: string | null;
+  occurrences: number;
+  generatedCount: number;
+  client: { id: string; name: string; whatsapp: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChargeSeriesCharge {
+  paymentId: string;
+  chargeId: string;
+  description: string;
+  sequence: number;
+  amountCents: number;
+  amountLabel: string;
+  dueDate: string;
+  status: PaymentStatus;
+}
+
+export interface ChargeSeriesDetail {
+  series: ChargeSeries;
+  charges: ChargeSeriesCharge[];
 }
 
 export interface PublicPayment {

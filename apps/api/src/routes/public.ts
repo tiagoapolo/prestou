@@ -187,7 +187,7 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
           `(${ctx.charge.description})` +
           `${comprovantePath ? " e anexou o comprovante" : ""}. ` +
           `Confira na sua conta e confirme no Prestou: ` +
-          `${config.publicWebUrl}/cobranca/${ctx.charge.id}`;
+          `${config.publicWebUrl}/cobranca/${updated.id}`;
 
         await notifyProvider({
           provider: ctx.provider,
@@ -200,7 +200,7 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
             formatBRL(updated.amount_cents),
             ctx.charge.description,
           ],
-          templateUrlButtonParam: ctx.charge.id,
+          templateUrlButtonParam: updated.id,
         });
 
         return { ok: true, status: updated.status };

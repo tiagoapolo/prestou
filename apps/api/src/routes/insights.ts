@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAppAdmin, requireProvider } from "../auth.js";
 import { funnel, track, type EventType } from "../analytics.js";
 import { runReminders } from "../reminders.js";
+import { runRecurringCharges } from "../charge-series.js";
 import { config } from "../config.js";
 import { purgeExpiredReceipts } from "../retention.js";
 import { purgeExpiredWhatsAppOnboarding } from "../whatsapp-onboarding.js";
@@ -70,8 +71,9 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
     if (!cronAuthorized(req.headers.authorization)) {
       return reply.code(401).send({ error: "Cron não autorizado" });
     }
-    const result = await runReminders();
-    return reply.send(result);
+    const recurring = await runRecurringCharges();
+    const reminders = await runReminders();
+    return reply.send({ ...reminders, recurring });
   });
 
   /** Expurgo diário de comprovantes 90 dias após a confirmação do pagamento. */

@@ -4,6 +4,7 @@ import multipart from "@fastify/multipart";
 import { config } from "./config.js";
 import { providerRoutes } from "./routes/providers.js";
 import { chargeRoutes } from "./routes/charges.js";
+import { chargeSeriesRoutes } from "./routes/charge-series.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { publicRoutes } from "./routes/public.js";
 import { publicSignupRoutes } from "./routes/public-signup.js";
@@ -14,6 +15,7 @@ import { whatsappSettingsRoutes, whatsappWebhookRoutes } from "./routes/whatsapp
 import { financialRoutes } from "./routes/financial.js";
 import { adminRoutes } from "./routes/admin.js";
 import { runReminders } from "./reminders.js";
+import { runRecurringCharges } from "./charge-series.js";
 import { closeDatabase } from "./db.js";
 import { publicErrorMessage } from "./public-errors.js";
 import {
@@ -80,6 +82,7 @@ export async function buildServer() {
 
   await app.register(providerRoutes);
   await app.register(chargeRoutes);
+  await app.register(chargeSeriesRoutes);
   await app.register(paymentRoutes);
   await app.register(financialRoutes);
   await app.register(adminRoutes);
@@ -133,7 +136,9 @@ if (isMain) {
     if (process.env.NODE_ENV !== "production") {
       setInterval(
         () => {
-          runReminders().catch((err) => app.log.error({ err }, "reminders failed"));
+          runRecurringCharges()
+            .then(() => runReminders())
+            .catch((err) => app.log.error({ err }, "scheduled charges failed"));
         },
         60 * 60 * 1000,
       ).unref();

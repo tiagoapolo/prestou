@@ -4,10 +4,16 @@ import { track } from "./analytics.js";
 import type { DatabaseClient } from "./db.js";
 import { newId, newPublicToken } from "./ids.js";
 import { chargeMessage, paymentUrl, waMeLink } from "./messages.js";
+import {
+  MAX_MONTHLY_OCCURRENCES,
+  MIN_MONTHLY_OCCURRENCES,
+  monthlyOccurrenceCount,
+} from "./recurrence.js";
 import type { ClientRow, ProviderRow } from "./types.js";
+import { todayISO } from "./state.js";
 import { amountCentsSchema, isoDateSchema, mobileSchema, requiredText } from "./validation.js";
 
-export const chargeDraftSchema = z.object({
+export const chargeDraftBaseSchema = z.object({
   client: z.object({
     id: z.string().uuid().optional(),
     name: requiredText("Nome do cliente", 2, 80).optional(),
@@ -17,10 +23,52 @@ export const chargeDraftSchema = z.object({
   amountCents: amountCentsSchema,
   dueDate: isoDateSchema,
   saveClient: z.boolean().default(true),
+  recurrence: z.object({
+    frequency: z.literal("monthly"),
+    endDate: isoDateSchema,
+  }).optional(),
 });
 
+export function validateChargeRecurrence(
+  draft: z.infer<typeof chargeDraftBaseSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  if (!draft.recurrence) return;
+  if (draft.dueDate < todayISO()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["dueDate"],
+      message: "O primeiro vencimento da série não pode estar no passado",
+    });
+  }
+  const occurrences = monthlyOccurrenceCount(draft.dueDate, draft.recurrence.endDate);
+  if (occurrences < MIN_MONTHLY_OCCURRENCES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["recurrence", "endDate"],
+      message: "A série mensal deve ter pelo menos 2 cobranças",
+    });
+  } else if (occurrences > MAX_MONTHLY_OCCURRENCES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["recurrence", "endDate"],
+      message: "A série mensal deve ter no máximo 24 cobranças",
+    });
+  }
+}
+
+export const chargeDraftSchema = chargeDraftBaseSchema.superRefine(validateChargeRecurrence);
+
 export type ChargeDraftInput = z.input<typeof chargeDraftSchema>;
-export type ChargeSource = "form" | "assistant" | "whatsapp";
+export type ChargeSource = "form" | "assistant" | "whatsapp" | "recurrence";
+
+export interface ChargeRecurrence {
+  seriesId: string;
+  frequency: "monthly";
+  endDate: string;
+  sequence: number;
+  occurrences: number;
+}
 
 export interface CreatedCharge {
   charge: {
@@ -36,6 +84,7 @@ export interface CreatedCharge {
     publicToken: string;
     paymentUrl: string;
   };
+  recurrence: ChargeRecurrence | null;
   whatsapp: { message: string; deeplink: string };
 }
 
@@ -148,7 +197,11 @@ export async function createCharge(
     providerId: provider.id,
     chargeId,
     paymentId,
-    metadata: { fillMs: fillMs ?? null, amountCents: input.amountCents, source },
+    metadata: {
+      fillMs: fillMs ?? null,
+      amountCents: input.amountCents,
+      source,
+    },
   }, tx);
 
   const message = chargeMessage({
@@ -173,6 +226,7 @@ export async function createCharge(
       publicToken: token,
       paymentUrl: paymentUrl(token),
     },
+    recurrence: null,
     whatsapp: { message, deeplink: waMeLink(client.whatsapp, message) },
   };
 }

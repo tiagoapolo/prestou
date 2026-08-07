@@ -270,7 +270,7 @@ export function FinancialPage() {
           <div className="financial-entry-main">
             <strong>{entry.client?.name ?? "Sem cliente"}</strong>
             <span>{entry.description} · {new Date(`${entry.receivedDate}T12:00:00`).toLocaleDateString("pt-BR")}</span>
-            <div><Badge variant="secondary">{methodLabels[entry.paymentMethod]}</Badge><Badge variant="secondary">{entry.source === "payment" ? "Cobrança" : "Avulsa"}</Badge>{entry.chargeId && <Link className="financial-charge-link" to={`/cobranca/${entry.chargeId}`}>Ver cobrança</Link>}</div>
+            <div><Badge variant="secondary">{methodLabels[entry.paymentMethod]}</Badge><Badge variant="secondary">{entry.source === "payment" ? "Cobrança" : "Avulsa"}</Badge>{entry.chargeId && <Link className="financial-charge-link" to={`/cobranca/${entry.sourceId}`}>Ver cobrança</Link>}</div>
           </div>
           <div className="financial-entry-value"><strong>{brl(entry.amountCents)}</strong><Button variant="ghost" size="sm" onClick={() => openEntry(entry)}><Pencil aria-hidden="true" />Editar</Button></div>
         </Card>)}

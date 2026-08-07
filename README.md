@@ -14,6 +14,8 @@ Implementado:
 - autenticação Supabase por magic link;
 - cadastro e reaproveitamento de clientes;
 - cobrança única com Pix estático;
+- séries mensais finitas com data final, geração sete dias antes do vencimento,
+  pausa, retomada, edição e cancelamento;
 - BR Code próprio com CRC16;
 - página pública de pagamento sem login;
 - QR Code sob demanda;

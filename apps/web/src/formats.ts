@@ -65,6 +65,43 @@ export function isoToDate(value: string): string {
   return `${day}/${month}/${year}`;
 }
 
+export interface MonthlySchedulePreview {
+  occurrences: number;
+  firstDueDate: string;
+  lastDueDate: string;
+}
+
+function monthlyDueDate(firstDueDate: string, offset: number): string {
+  const [firstYear, firstMonth, anchorDay] = firstDueDate.split("-").map(Number);
+  const monthIndex = firstYear! * 12 + firstMonth! - 1 + offset;
+  const year = Math.floor(monthIndex / 12);
+  const month = monthIndex % 12;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const day = Math.min(anchorDay!, lastDay);
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+export function monthlySchedulePreview(
+  firstDueDate: string,
+  endDate: string,
+): MonthlySchedulePreview | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDueDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    return null;
+  }
+
+  let occurrences = 0;
+  let lastDueDate = firstDueDate;
+  for (let offset = 0; offset <= 24; offset++) {
+    const dueDate = monthlyDueDate(firstDueDate, offset);
+    if (dueDate > endDate) break;
+    occurrences++;
+    lastDueDate = dueDate;
+  }
+
+  if (occurrences < 2 || occurrences > 24) return null;
+  return { occurrences, firstDueDate, lastDueDate };
+}
+
 export function dateAfterDaysISO(days: number, from = new Date()): string {
   const date = new Date(from);
   date.setHours(12, 0, 0, 0);

@@ -12,6 +12,7 @@ interface Detail {
   paymentId: string; description: string; amountLabel: string; dueDate: string;
   status: string; client: { name: string; whatsapp: string }; paymentUrl: string;
   comprovanteUrl: string | null; clientConfirmedAt: string | null; paidAt: string | null;
+  recurrence: { seriesId: string; sequence: number; occurrences: number } | null;
 }
 
 interface ActionProposal {
@@ -125,8 +126,9 @@ export function ChargeDetailPage() {
   if (!detail) return <Spinner />;
   return <div className="page"><div className="back-title"><Link to="/">←</Link><div><p className="eyebrow">Detalhe da cobrança</p><h1>{detail.client.name}</h1></div></div>
     <Card className="detail-card">
-      <div className="detail-value"><span>{detail.description}</span><strong>{detail.amountLabel}</strong></div>
+      <div className="detail-value"><span>{detail.description}{detail.recurrence ? ` · Mensalidade ${detail.recurrence.sequence} de ${detail.recurrence.occurrences}` : ""}</span><strong>{detail.amountLabel}</strong></div>
       <dl><div><dt>Vencimento</dt><dd>{new Date(`${detail.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}</dd></div><div><dt>Status</dt><dd><Badge variant="secondary" className={`badge ${detail.status}`}>{detail.status.replace("cliente_confirmou", "aguardando validação").replace("em_aberto", "em aberto")}</Badge></dd></div></dl>
+      {detail.recurrence && <Button variant="ghost" className="series-link" asChild><Link to={`/series/${detail.recurrence.seriesId}`}>Ver série mensal</Link></Button>}
       {detail.comprovanteUrl && <Button variant="ghost" className="receipt-link" disabled={busy} loading={pendingAction === "receipt"} loadingLabel="Abrindo…" onClick={openReceipt}>Ver comprovante anexado ↗</Button>}
     </Card>
     {message && <ErrorNotice message={message} />}

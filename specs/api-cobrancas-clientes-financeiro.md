@@ -55,6 +55,41 @@ GET /api/charges
 
 Retorna as cobranças mais recentes do prestador, ordenadas por data de criação decrescente. A ordenação usa o identificador do pagamento como desempate para manter a paginação estável.
 
+## Criar cobrança
+
+```http
+POST /api/charges
+```
+
+Por padrão, cria uma cobrança avulsa. Para cadastrar uma série mensal, o corpo
+aceita `recurrence: { "frequency": "monthly", "endDate": "2027-12-31" }`.
+A data final é obrigatória e inclusiva, e o intervalo deve resultar em 2 a 24
+cobranças. O vencimento informado é o primeiro da série; os seguintes mantêm o
+dia-âncora nos meses posteriores e usam o último dia do mês quando necessário
+(por exemplo, 31 de janeiro vira 28 de fevereiro e volta a 31 em março).
+
+Somente a primeira cobrança é criada na requisição. As próximas são geradas
+sete dias antes de cada vencimento pelo job interno, portanto competências
+futuras ainda não geradas não entram em “A receber”. Cada cobrança gerada tem
+estado, link Pix e baixa independentes. A resposta mantém `payment` como a
+primeira cobrança e acrescenta `recurrence` com `seriesId`, `sequence` e a
+quantidade prevista.
+
+## Gerenciar séries mensais
+
+As rotas autenticadas de série são:
+
+- `GET /api/charge-series` — lista paginada;
+- `GET /api/charge-series/:id` — regra e cobranças já geradas;
+- `PATCH /api/charge-series/:id` — altera descrição, valor, dia e data final
+  somente para cobranças futuras;
+- `POST /api/charge-series/:id/pause` — interrompe novas gerações;
+- `POST /api/charge-series/:id/resume` — retoma sem recuperar meses vencidos;
+- `POST /api/charge-series/:id/cancel` — cancela definitivamente novas gerações.
+
+As séries usam os estados `ativa`, `pausada`, `cancelada` e `concluida`.
+Pausar, editar ou cancelar nunca altera uma cobrança já gerada.
+
 ### Parâmetros de consulta
 
 | Parâmetro | Tipo | Padrão | Regra |

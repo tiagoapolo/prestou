@@ -8,12 +8,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { dateAfterDaysISO, dateToISO, formatDate, formatMobile, formatMoney, isValidMobile, isoToDate, moneyToCents, normalizeMobile } from "../formats";
+import { dateAfterDaysISO, dateToISO, formatDate, formatMobile, formatMoney, isValidMobile, isoToDate, moneyToCents, monthlySchedulePreview, normalizeMobile } from "../formats";
 import { userMessage } from "../errors";
 import { useAuth } from "../auth";
 
 interface Client { id: string; name: string; whatsapp: string }
-interface Created { payment: { id: string }; whatsapp: { deeplink: string; message: string } }
+interface Created {
+  payment: { id: string };
+  recurrence: { seriesId: string; frequency: "monthly"; endDate: string; sequence: number; occurrences: number } | null;
+  whatsapp: { deeplink: string; message: string };
+}
 interface AssistantDraft {
   client: { id?: string; name: string; whatsapp: string };
   description: string;
@@ -42,6 +46,13 @@ export function NewChargePage() {
   const [dueDate, setDueDate] = useState(() => isoToDate(
     assistantDraft?.dueDate ?? dateAfterDaysISO(provider?.defaultDueDays ?? 0),
   ));
+  const [recurring, setRecurring] = useState(false);
+  const [endDate, setEndDate] = useState("");
+  const dueDateISO = dateToISO(dueDate);
+  const endDateISO = dateToISO(endDate);
+  const recurrencePreview = dueDateISO && endDateISO
+    ? monthlySchedulePreview(dueDateISO, endDateISO)
+    : null;
   useEffect(() => {
     api<{ clients: Client[] }>("/api/clients")
       .then((response) => setClients(response.clients))
@@ -81,9 +92,16 @@ export function NewChargePage() {
     if (!dueDateISO) {
       setError("Informe uma data válida no formato DD/MM/AAAA"); setBusy(false); return;
     }
+    const endDateISO = recurring ? dateToISO(endDate) : null;
+    if (recurring && !endDateISO) {
+      setError("Informe uma data final válida no formato DD/MM/AAAA"); setBusy(false); return;
+    }
+    if (recurring && !monthlySchedulePreview(dueDateISO, endDateISO!)) {
+      setError("A série mensal deve ter de 2 a 24 cobranças"); setBusy(false); return;
+    }
     const client = selected ? { id: selected } : { name: clientName, whatsapp: normalizeMobile(clientWhatsapp) };
     try {
-      const result = await api<Created>("/api/charges", { method: "POST", body: JSON.stringify({ client, description, amountCents, dueDate: dueDateISO, saveClient: selected ? true : saveClient, fillMs: Date.now() - started.current, source: assistantDraft ? "assistant" : "form" }) });
+      const result = await api<Created>("/api/charges", { method: "POST", body: JSON.stringify({ client, description, amountCents, dueDate: dueDateISO, saveClient: selected ? true : saveClient, recurrence: recurring ? { frequency: "monthly", endDate: endDateISO } : undefined, fillMs: Date.now() - started.current, source: assistantDraft ? "assistant" : "form" }) });
       setCreated(result);
     } catch (err) { setError(userMessage(err, "Não foi possível criar a cobrança. Tente novamente.")); }
     finally { setBusy(false); }
@@ -102,7 +120,7 @@ export function NewChargePage() {
     }
   }
 
-  if (created) return <div className="page success-page"><div className="success-icon">✓</div><p className="eyebrow">Cobrança criada</p><h1>Pronta para enviar</h1><p>A mensagem já está escrita com o valor e o link certo.</p>{error && <ErrorNotice message={error} />}<Button className="whatsapp-button" loading={openingWhatsApp} loadingLabel="Abrindo…" onClick={openWhatsApp}>Abrir WhatsApp</Button><Button variant="secondary" asChild><Link to="/">Voltar ao painel</Link></Button></div>;
+  if (created) return <div className="page success-page"><div className="success-icon">✓</div><p className="eyebrow">{created.recurrence ? "Série mensal criada" : "Cobrança criada"}</p><h1>Pronta para enviar</h1><p>{created.recurrence ? `A primeira de ${created.recurrence.occurrences} cobranças foi criada agora. As próximas serão preparadas 7 dias antes de cada vencimento.` : "A mensagem já está escrita com o valor e o link certo."}</p>{error && <ErrorNotice message={error} />}<Button className="whatsapp-button" loading={openingWhatsApp} loadingLabel="Abrindo…" onClick={openWhatsApp}>Abrir WhatsApp</Button><Button variant="secondary" asChild><Link to="/">Voltar ao painel</Link></Button></div>;
 
   return <div className="page"><div className="back-title"><Link to="/">←</Link><div><p className="eyebrow">Meta: menos de 60 segundos</p><h1>Nova cobrança</h1></div></div>
     <Card asChild className="form-card"><form className="stack" onSubmit={submit}>
@@ -111,6 +129,16 @@ export function NewChargePage() {
       {!selected && <Label className="check-row"><Checkbox checked={saveClient} onCheckedChange={(checked) => setSaveClient(checked === true)} /> <span>Salvar cliente para futuros serviços</span></Label>}
       <Label>Serviço<Input name="description" required minLength={2} maxLength={120} placeholder="Ex.: corte de grama" value={description} onChange={(event) => setDescription(event.target.value)} /></Label>
       <div className="two-fields"><Label>Valor (R$)<Input name="amount" required inputMode="numeric" placeholder="150,00" value={amount} onChange={(event) => setAmount(formatMoney(event.target.value))} maxLength={9} /></Label><Label>Vencimento<Input name="dueDate" required inputMode="numeric" placeholder="DD/MM/AAAA" value={dueDate} onChange={(event) => setDueDate(formatDate(event.target.value))} maxLength={10} pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" title="Informe uma data válida no formato DD/MM/AAAA" /></Label></div>
+      <div className="recurrence-row"><input id="recurring-charge" type="checkbox" checked={recurring} onChange={(event) => setRecurring(event.target.checked)} /><Label htmlFor="recurring-charge">Repetir esta cobrança todo mês</Label></div>
+      {recurring && <div className="recurrence-fields">
+        <Label>Data final da série<Input aria-label="Data final da série" aria-describedby="recurrence-help" name="endDate" required inputMode="numeric" placeholder="DD/MM/AAAA" value={endDate} onChange={(event) => setEndDate(formatDate(event.target.value))} maxLength={10} pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" title="Informe uma data válida no formato DD/MM/AAAA" /><small id="recurrence-help" className="field-help">A data final é inclusiva. A série deve ter de 2 a 24 cobranças.</small></Label>
+        {recurrencePreview && <div className="recurrence-preview" role="status" aria-live="polite">
+          <strong>{recurrencePreview.occurrences} cobranças mensais</strong>
+          <span>Primeiro vencimento: {isoToDate(recurrencePreview.firstDueDate)}</span>
+          <span>Último vencimento: {isoToDate(recurrencePreview.lastDueDate)}</span>
+          <small>Só a primeira será criada agora. As próximas serão preparadas 7 dias antes do vencimento.</small>
+        </div>}
+      </div>}
       {error && <ErrorNotice message={error} />}
       <Button loading={busy} loadingLabel="Criando…">Criar e preparar mensagem</Button>
     </form></Card>
